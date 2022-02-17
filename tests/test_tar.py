@@ -1,7 +1,7 @@
 """Test Tarfile functions."""
 import os
 from pathlib import Path, PurePath
-import dataclasses
+from dataclasses import dataclass
 import shutil
 
 from securetar import (
@@ -12,7 +12,7 @@ from securetar import (
 )
 
 
-@dataclasses
+@dataclass
 class TarInfo:
     """Fake TarInfo."""
 
@@ -72,7 +72,7 @@ def test_create_pure_tar(tmp_path):
     """Test to create a tar file without encryption."""
     # Prepair test folder
     temp_orig = tmp_path.joinpath("orig")
-    fixture_data = Path(__file__).joinpath("fixtures/tar_data")
+    fixture_data = Path(__file__).parent.joinpath("fixtures/tar_data")
     shutil.copytree(fixture_data, temp_orig, symlinks=True)
 
     # Create Tarfile
@@ -111,7 +111,7 @@ def test_create_ecrypted_tar(tmp_path):
 
     # Prepair test folder
     temp_orig = tmp_path.joinpath("orig")
-    fixture_data = Path(__file__).joinpath("fixtures/tar_data")
+    fixture_data = Path(__file__).parent.joinpath("fixtures/tar_data")
     shutil.copytree(fixture_data, temp_orig, symlinks=True)
 
     # Create Tarfile
