@@ -5,9 +5,9 @@ name: Run Tests
 
 on:
   push:
-    branches: [master]
+    branches: [main]
   pull_request:
-    branches: [master]
+    branches: [main]
 
 jobs:
   build:
@@ -15,20 +15,21 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
-      - name: Set up Python 3.8
+      - name: Set up Python 3.9
         uses: actions/setup-python@v1
         with:
-          python-version: 3.8
+          python-version: 3.9
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
           pip install -r requirements-test.txt
+          pip install -e .
       - name: Lint with flake8
         run: |
-          flake8 aiohue tests
+          flake8 securetar tests
       - name: Check formatting with black
         run: |
-          black aiohue tests --check
+          black securetar tests --check
       - name: Run tests
         run: |
           pytest tests
