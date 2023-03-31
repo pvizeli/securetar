@@ -19,6 +19,7 @@ _LOGGER: logging.Logger = logging.getLogger(__name__)
 
 BLOCK_SIZE = 16
 BLOCK_SIZE_BITS = 128
+DEFAULT_BUFSIZE = 10240
 
 MOD_READ = "r"
 MOD_WRITE = "w"
@@ -28,12 +29,18 @@ class SecureTarFile:
     """Handle encrypted files for tarfile library."""
 
     def __init__(
-        self, name: Path, mode: str, key: Optional[bytes] = None, gzip: bool = True
+        self,
+        name: Path,
+        mode: str,
+        key: Optional[bytes] = None,
+        gzip: bool = True,
+        bufsize: int = DEFAULT_BUFSIZE,
     ) -> None:
         """Initialize encryption handler."""
         self._file: Optional[IO[bytes]] = None
         self._mode: str = mode
         self._name: Path = name
+        self._bufsize: int = bufsize
 
         # Tarfile options
         self._tar: Optional[tarfile.TarFile] = None
@@ -51,7 +58,10 @@ class SecureTarFile:
         """Start context manager tarfile."""
         if not self._key:
             self._tar = tarfile.open(
-                name=str(self._name), mode=self._tar_mode, dereference=False
+                name=str(self._name),
+                mode=self._tar_mode,
+                dereference=False,
+                bufsize=self._bufsize,
             )
             return self._tar
 
@@ -79,7 +89,9 @@ class SecureTarFile:
         self._decrypt = self._aes.decryptor()
         self._encrypt = self._aes.encryptor()
 
-        self._tar = tarfile.open(fileobj=self, mode=self._tar_mode, dereference=False)
+        self._tar = tarfile.open(
+            fileobj=self, mode=self._tar_mode, dereference=False, bufsize=self._bufsize
+        )
         return self._tar
 
     def __exit__(self, exc_type, exc_value, traceback) -> None:

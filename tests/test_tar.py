@@ -4,6 +4,8 @@ from pathlib import Path, PurePath
 from dataclasses import dataclass
 import shutil
 
+import pytest
+
 from securetar import (
     SecureTarFile,
     _is_excluded_by_filter,
@@ -68,7 +70,8 @@ def test_is_exclude_by_filter_bad():
         assert _is_excluded_by_filter(path_object, filter_list) is True
 
 
-def test_create_pure_tar(tmp_path):
+@pytest.mark.parametrize("bufsize", [10240, 4 * 2**20])
+def test_create_pure_tar(tmp_path, bufsize):
     """Test to create a tar file without encryption."""
     # Prepair test folder
     temp_orig = tmp_path.joinpath("orig")
@@ -77,7 +80,7 @@ def test_create_pure_tar(tmp_path):
 
     # Create Tarfile
     temp_tar = tmp_path.joinpath("backup.tar")
-    with SecureTarFile(temp_tar, "w") as tar_file:
+    with SecureTarFile(temp_tar, "w", bufsize=bufsize) as tar_file:
         atomic_contents_add(
             tar_file,
             temp_orig,
@@ -89,7 +92,7 @@ def test_create_pure_tar(tmp_path):
 
     # Restore
     temp_new = tmp_path.joinpath("new")
-    with SecureTarFile(temp_tar, "r") as tar_file:
+    with SecureTarFile(temp_tar, "r", bufsize=bufsize) as tar_file:
         tar_file.extractall(path=temp_new, members=tar_file)
 
     assert temp_new.is_dir()
@@ -105,7 +108,8 @@ def test_create_pure_tar(tmp_path):
     assert temp_new.joinpath("README.md").is_file()
 
 
-def test_create_ecrypted_tar(tmp_path):
+@pytest.mark.parametrize("bufsize", [10240, 4 * 2**20])
+def test_create_ecrypted_tar(tmp_path, bufsize):
     """Test to create a tar file with encryption."""
     key = os.urandom(16)
 
@@ -116,7 +120,7 @@ def test_create_ecrypted_tar(tmp_path):
 
     # Create Tarfile
     temp_tar = tmp_path.joinpath("backup.tar")
-    with SecureTarFile(temp_tar, "w", key=key) as tar_file:
+    with SecureTarFile(temp_tar, "w", key=key, bufsize=bufsize) as tar_file:
         atomic_contents_add(
             tar_file,
             temp_orig,
@@ -128,7 +132,7 @@ def test_create_ecrypted_tar(tmp_path):
 
     # Restore
     temp_new = tmp_path.joinpath("new")
-    with SecureTarFile(temp_tar, "r", key=key) as tar_file:
+    with SecureTarFile(temp_tar, "r", key=key, bufsize=bufsize) as tar_file:
         tar_file.extractall(path=temp_new, members=tar_file)
 
     assert temp_new.is_dir()
