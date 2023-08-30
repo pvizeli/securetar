@@ -4,7 +4,7 @@ import logging
 import os
 from pathlib import Path, PurePath
 import tarfile
-from typing import IO, Generator, Optional
+from typing import IO, Generator, Optional, Union
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import padding
@@ -33,8 +33,9 @@ class SecureTarFile:
         name: Path,
         mode: str,
         key: Optional[bytes] = None,
-        gzip: bool = True,
+        gzip: Union[bool, str] = True,
         bufsize: int = DEFAULT_BUFSIZE,
+        compresslevel: int = 9,
     ) -> None:
         """Initialize encryption handler."""
         self._file: Optional[IO[bytes]] = None
@@ -44,7 +45,17 @@ class SecureTarFile:
 
         # Tarfile options
         self._tar: Optional[tarfile.TarFile] = None
-        self._tar_mode: str = f"{mode}|gz" if gzip else f"{mode}|"
+        if isinstance(gzip, bool):
+            if gzip:
+                self._compression_mode = 'gz'
+            else:
+                self._compression_mode = ''
+        else:
+            self._compression_mode = gzip
+
+
+        self._tar_mode: str = f"{mode}|{self._compression_mode}"
+        self._compresslevel = compresslevel
 
         # Encryption/Description
         self._aes: Optional[Cipher] = None
@@ -56,12 +67,16 @@ class SecureTarFile:
 
     def __enter__(self) -> tarfile.TarFile:
         """Start context manager tarfile."""
+        extra_args = {}
+        if self._tar_mode in ('w:gz', 'r:gz', 'w:bz2', 'r:bz2', 'x:gz', 'x:bz2'):
+            extra_args['compresslevel'] = self._compresslevel
         if not self._key:
             self._tar = tarfile.open(
                 name=str(self._name),
                 mode=self._tar_mode,
                 dereference=False,
                 bufsize=self._bufsize,
+                **extra_args
             )
             return self._tar
 
@@ -90,7 +105,7 @@ class SecureTarFile:
         self._encrypt = self._aes.encryptor()
 
         self._tar = tarfile.open(
-            fileobj=self, mode=self._tar_mode, dereference=False, bufsize=self._bufsize
+            fileobj=self, mode=self._tar_mode, dereference=False, bufsize=self._bufsize, **extra_args
         )
         return self._tar
 
