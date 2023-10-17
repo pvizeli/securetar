@@ -41,10 +41,13 @@ class SecureTarFile:
         self._mode: str = mode
         self._name: Path = name
         self._bufsize: int = bufsize
+        self._extra_args = {}
 
         # Tarfile options
         self._tar: Optional[tarfile.TarFile] = None
-        self._tar_mode: str = f"{mode}|gz" if gzip else f"{mode}|"
+        self._tar_mode: str = f"{mode}:gz" if gzip else f"{mode}|"
+        if gzip:
+            self._extra_args["compresslevel"] = 6
 
         # Encryption/Description
         self._aes: Optional[Cipher] = None
@@ -62,6 +65,7 @@ class SecureTarFile:
                 mode=self._tar_mode,
                 dereference=False,
                 bufsize=self._bufsize,
+                **self._extra_args
             )
             return self._tar
 
