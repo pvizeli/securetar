@@ -362,3 +362,14 @@ def test_inner_tar_not_allowed_in_encrypted(tmp_path: Path) -> None:
         with outer_secure_tar_file:
             with outer_secure_tar_file.create_inner_tar("any.tgz", gzip=True):
                 pass
+
+
+def test_outer_tar_must_not_be_compressed(tmp_path: Path) -> None:
+    # Create Tarfile
+    main_tar = tmp_path.joinpath("backup.tar.gz")
+    outer_secure_tar_file = SecureTarFile(main_tar, "w", gzip=True)
+
+    with pytest.raises(OSError):
+        with outer_secure_tar_file:
+            with outer_secure_tar_file.create_inner_tar("any.tgz", gzip=True):
+                pass
