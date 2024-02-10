@@ -10,8 +10,13 @@ from pathlib import Path, PurePath
 
 import pytest
 
-from securetar import (SecureTarFile, _is_excluded_by_filter, add_stream,
-                       atomic_contents_add, secure_path)
+from securetar import (
+    SecureTarFile,
+    _is_excluded_by_filter,
+    add_stream,
+    atomic_contents_add,
+    secure_path,
+)
 
 
 @dataclass
