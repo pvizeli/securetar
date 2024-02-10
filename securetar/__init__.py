@@ -72,13 +72,12 @@ class SecureTarFile:
     ) -> "InnerSecureTarFile":
         """Create inner tar file."""
         return InnerSecureTarFile(
+            self._tar,
             name=Path(name),
             mode=self._mode,
             key=key,
             gzip=gzip,
             bufsize=self._bufsize,
-            fileobj=self._tar.fileobj,
-            outer_tar=self._tar,
         )
 
     def __enter__(self) -> tarfile.TarFile:
@@ -174,13 +173,12 @@ class InnerSecureTarFile(SecureTarFile):
 
     def __init__(
         self,
+        outer_tar: tarfile.TarFile,
         name: Path,
         mode: str,
         key: Optional[bytes] = None,
         gzip: bool = True,
         bufsize: int = DEFAULT_BUFSIZE,
-        fileobj: Optional[IO[bytes]] = None,
-        outer_tar: Optional[tarfile.TarFile] = None,
     ) -> None:
         """Initialize inner handler."""
         super().__init__(
@@ -189,7 +187,7 @@ class InnerSecureTarFile(SecureTarFile):
             key=key,
             gzip=gzip,
             bufsize=bufsize,
-            fileobj=fileobj,
+            fileobj=outer_tar.fileobj,
         )
         self.outer_tar = outer_tar
         self.stream: Generator[BinaryIO, None, None] | None = None
