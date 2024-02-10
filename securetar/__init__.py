@@ -196,10 +196,6 @@ class InnerSecureTarFile(SecureTarFile):
 
     def __enter__(self) -> tarfile.TarFile:
         """Start context manager tarfile."""
-        fileobj = self.outer_tar.fileobj
-        self.tell_before_adding_inner_file_header = fileobj.tell()
-        # Write an empty header for the inner tar file
-        # We'll seek back to this position later to update the header with the correct size
         tar_info = tarfile.TarInfo(name=str(self._name))
         tar_info.mtime = time.time()
         self.stream = add_stream(self.outer_tar, tar_info)
