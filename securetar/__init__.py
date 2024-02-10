@@ -25,8 +25,6 @@ DEFAULT_BUFSIZE = 10240
 MOD_READ = "r"
 MOD_WRITE = "w"
 
-EMPTY_TAR_INFO_BLOCK = tarfile.NUL * tarfile.BLOCKSIZE
-
 
 class SecureTarFile:
     """Handle encrypted files for tarfile library."""
@@ -195,6 +193,7 @@ class InnerSecureTarFile(SecureTarFile):
         self.offset_before_adding_inner_file_header: Optional[int] = None
         self.outer_tar = outer_tar
         self.inner_tar: Optional[tarfile.TarFile] = None
+        self.tar_info = tarfile.TarInfo(name=str(self._name))
 
     def __enter__(self) -> tarfile.TarFile:
         """Start context manager tarfile."""
@@ -202,7 +201,11 @@ class InnerSecureTarFile(SecureTarFile):
         self.offset_before_adding_inner_file_header = outer_tar.offset
         # Write an empty header for the inner tar file
         # We'll seek back to this position later to update the header with the correct size
-        outer_tar.fileobj.write(EMPTY_TAR_INFO_BLOCK)
+        tar_info = self.tar_info
+        tar_info.mtime = time.time()
+        outer_tar.fileobj.write(
+            tar_info.tobuf(outer_tar.format, outer_tar.encoding, outer_tar.errors)
+        )
         self.inner_tar = super().__enter__()
         return self.inner_tar
 
@@ -219,10 +222,8 @@ class InnerSecureTarFile(SecureTarFile):
             fileobj.write(tarfile.NUL * (tarfile.BLOCKSIZE - remainder))
             blocks += 1
         outer_tar.offset += blocks * tarfile.BLOCKSIZE
-
-        tar_info = tarfile.TarInfo(name=str(self._name))
+        tar_info = self.tar_info
         tar_info.size = size_of_inner_tar
-        tar_info.mtime = time.time()
         # Now that we know the size of the inner tar, we seek back
         # to where we started and re-add the member with the correct size
         fileobj.seek(self.offset_before_adding_inner_file_header)
