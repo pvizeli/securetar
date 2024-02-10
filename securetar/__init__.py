@@ -71,7 +71,7 @@ class SecureTarFile:
     @contextmanager
     def create_inner_tar(
         self, name: str, key: Optional[bytes] = None, gzip: bool = True
-    ) -> Generator[Any, Any, tarfile.TarFile]:
+    ) -> Generator[tarfile.TarFile]:
         """Create inner tar file."""
         outer_tar = self._tar
         assert outer_tar
