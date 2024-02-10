@@ -5,7 +5,7 @@ import os
 import tarfile
 from contextlib import contextmanager
 from pathlib import Path, PurePath
-from typing import IO, Generator, Optional
+from typing import Any, IO, Generator, Optional
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import padding
@@ -71,7 +71,7 @@ class SecureTarFile:
     @contextmanager
     def create_inner_tar(
         self, name: str, key: Optional[bytes] = None, gzip: bool = True
-    ) -> Generator[tarfile.TarFile]:
+    ) -> Generator[tarfile.TarFile, Any, Any]:
         """Create inner tar file."""
         outer_tar = self._tar
         assert outer_tar

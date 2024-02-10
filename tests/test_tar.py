@@ -1,6 +1,7 @@
 """Test Tarfile functions."""
 import os
 import shutil
+import tarfile
 from dataclasses import dataclass
 from pathlib import Path, PurePath
 
@@ -260,3 +261,16 @@ def test_encrypted_gzipped_tar_inside_tar(tmp_path: Path) -> None:
             "775",
         ]
         assert temp_inner_new.joinpath("README.md").is_file()
+
+
+def test_inner_tar_not_allowed_in_encrypted(tmp_path: Path) -> None:
+    # Create Tarfile
+    main_tar = tmp_path.joinpath("backup.tar")
+    key = os.urandom(16)
+
+    outer_secure_tar_file = SecureTarFile(main_tar, "w", key=key, gzip=False)
+
+    with pytest.raises(tarfile.StreamError):
+        with outer_secure_tar_file:
+            with outer_secure_tar_file.create_inner_tar("any.tgz", gzip=True):
+                pass
