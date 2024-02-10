@@ -204,6 +204,75 @@ def test_gzipped_tar_inside_tar(tmp_path: Path) -> None:
         assert temp_inner_new.joinpath("README.md").is_file()
 
 
+def test_gzipped_tar_inside_tar_failure(tmp_path: Path) -> None:
+    # Prepare test folder
+    temp_orig = tmp_path.joinpath("orig")
+    fixture_data = Path(__file__).parent.joinpath("fixtures/tar_data")
+    shutil.copytree(fixture_data, temp_orig, symlinks=True)
+
+    # Create Tarfile
+    main_tar = tmp_path.joinpath("backup.tar")
+    outer_secure_tar_file = SecureTarFile(main_tar, "w", gzip=False)
+    with outer_secure_tar_file as outer_tar_file:
+        # Make the first tar file to ensure that
+        # the second tar file can still be created
+        with pytest.raises(ValueError, match="Test"):
+            with outer_secure_tar_file.create_inner_tar(
+                "failed.tar.gz", gzip=True
+            ) as inner_tar_file:
+                raise ValueError("Test")
+
+        with pytest.raises(ValueError, match="Test"):
+            with outer_secure_tar_file.create_inner_tar(
+                "good.tar.gz", gzip=True
+            ) as inner_tar_file:
+                atomic_contents_add(
+                    inner_tar_file,
+                    temp_orig,
+                    excludes=[],
+                    arcname=".",
+                )
+                raise ValueError("Test")
+
+        assert len(outer_tar_file.getmembers()) == 2
+
+    assert main_tar.exists()
+    # Restore
+    temp_new = tmp_path.joinpath("new")
+    with SecureTarFile(main_tar, "r", gzip=False) as tar_file:
+        tar_file.extractall(path=temp_new)
+
+    assert temp_new.is_dir()
+    assert temp_new.joinpath("good.tar.gz").is_file()
+
+    failed_path = temp_new.joinpath("failed.tar.gz")
+    assert failed_path.is_file()
+
+    # Extract inner tar
+    temp_inner_new = tmp_path.joinpath("good.tar.gz_inner_new")
+
+    with SecureTarFile(temp_new.joinpath("good.tar.gz"), "r", gzip=True) as tar_file:
+        tar_file.extractall(path=temp_inner_new, members=tar_file)
+
+    assert temp_inner_new.is_dir()
+    assert temp_inner_new.joinpath("test_symlink").is_symlink()
+    assert temp_inner_new.joinpath("test1").is_dir()
+    assert temp_inner_new.joinpath("test1/script.sh").is_file()
+
+    # 775 is correct for local, but in GitHub action it's 755, both is fine
+    assert oct(temp_inner_new.joinpath("test1/script.sh").stat().st_mode)[-3:] in [
+        "755",
+        "775",
+    ]
+    assert temp_inner_new.joinpath("README.md").is_file()
+
+    # Extract failed inner tar (should not raise but will be empty)
+    temp_inner_new = tmp_path.joinpath("failed.tar.gz_inner_new")
+
+    with SecureTarFile(temp_new.joinpath("failed.tar.gz"), "r", gzip=True) as tar_file:
+        tar_file.extractall(path=temp_inner_new, members=tar_file)
+
+
 def test_encrypted_gzipped_tar_inside_tar(tmp_path: Path) -> None:
     key = os.urandom(16)
 
