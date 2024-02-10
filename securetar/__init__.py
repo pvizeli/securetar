@@ -182,6 +182,7 @@ class InnerSecureTarFile(SecureTarFile):
         fileobj: Optional[IO[bytes]] = None,
         outer_tar: Optional[tarfile.TarFile] = None,
     ) -> None:
+        """Initialize inner handler."""
         super().__init__(
             name=name,
             mode=mode,
