@@ -10,13 +10,8 @@ from pathlib import Path, PurePath
 
 import pytest
 
-from securetar import (
-    SecureTarFile,
-    add_stream,
-    _is_excluded_by_filter,
-    atomic_contents_add,
-    secure_path,
-)
+from securetar import (SecureTarFile, _is_excluded_by_filter, add_stream,
+                       atomic_contents_add, secure_path)
 
 
 @dataclass
@@ -374,7 +369,6 @@ def test_outer_tar_must_not_be_compressed(tmp_path: Path) -> None:
         with outer_secure_tar_file:
             with outer_secure_tar_file.create_inner_tar("any.tgz", gzip=True):
                 pass
-
 
 
 def test_tar_stream(tmp_path: Path) -> None:
