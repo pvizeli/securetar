@@ -3,9 +3,8 @@ import hashlib
 import logging
 import os
 import tarfile
-from contextlib import contextmanager
 from pathlib import Path, PurePath
-from typing import Any, IO, Generator, Optional
+from typing import IO, Any, Generator, Optional
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import padding
@@ -68,46 +67,19 @@ class SecureTarFile:
         self._decrypt: Optional[CipherContext] = None
         self._encrypt: Optional[CipherContext] = None
 
-    @contextmanager
     def create_inner_tar(
         self, name: str, key: Optional[bytes] = None, gzip: bool = True
-    ) -> Generator[tarfile.TarFile, Any, Any]:
+    ) -> "InnerSecureTarFile":
         """Create inner tar file."""
-        outer_tar = self._tar
-        assert outer_tar
-        fileobj = outer_tar.fileobj
-        offset_before_adding_inner_file_header = outer_tar.offset
-        # Write an empty header for the inner tar file
-        # We'll seek back to this position later to update the header with the correct size
-        fileobj.write(EMPTY_TAR_INFO_BLOCK)
-        with SecureTarFile(
+        return InnerSecureTarFile(
             name=Path(name),
             mode=self._mode,
             key=key,
             gzip=gzip,
             bufsize=self._bufsize,
-            fileobj=fileobj,
-        ) as inner_tar:
-            yield inner_tar
-
-        # Pad the outer tar file to a multiple of BLOCKSIZE
-        # in case the inner tar file is not a multiple of BLOCKSIZE
-        size_of_inner_tar = inner_tar.offset
-        blocks, remainder = divmod(size_of_inner_tar, tarfile.BLOCKSIZE)
-        if remainder > 0:
-            fileobj.write(tarfile.NUL * (tarfile.BLOCKSIZE - remainder))
-            blocks += 1
-        outer_tar.offset += blocks * tarfile.BLOCKSIZE
-
-        tar_info = tarfile.TarInfo(name=name)
-        tar_info.size = size_of_inner_tar
-        # Now that we know the size of the inner tar, we seek back
-        # to where we started and re-add the member with the correct size
-        fileobj.seek(offset_before_adding_inner_file_header)
-        outer_tar.addfile(tar_info)
-
-        # Finally return to the end of the outer tar file
-        fileobj.seek(outer_tar.offset)
+            fileobj=self._tar.fileobj,
+            outer_tar=self._tar,
+        )
 
     def __enter__(self) -> tarfile.TarFile:
         """Start context manager tarfile."""
@@ -195,6 +167,66 @@ class SecureTarFile:
         if not self._name.is_file():
             return 0
         return round(self._name.stat().st_size / 1_048_576, 2)  # calc mbyte
+
+
+class InnerSecureTarFile(SecureTarFile):
+    def __init__(
+        self,
+        name: Path,
+        mode: str,
+        key: Optional[bytes] = None,
+        gzip: bool = True,
+        bufsize: int = DEFAULT_BUFSIZE,
+        fileobj: Optional[IO[bytes]] = None,
+        outer_tar: Optional[tarfile.TarFile] = None,
+    ) -> None:
+        super().__init__(
+            name=name,
+            mode=mode,
+            key=key,
+            gzip=gzip,
+            bufsize=bufsize,
+            fileobj=fileobj,
+        )
+        self.offset_before_adding_inner_file_header: Optional[int] = None
+        self.outer_tar = outer_tar
+        self.inner_tar: Optional[tarfile.TarFile] = None
+
+    def __enter__(self) -> tarfile.TarFile:
+        """Start context manager tarfile."""
+        outer_tar = self.outer_tar
+        fileobj = outer_tar.fileobj
+        self.offset_before_adding_inner_file_header = outer_tar.offset
+        # Write an empty header for the inner tar file
+        # We'll seek back to this position later to update the header with the correct size
+        fileobj.write(EMPTY_TAR_INFO_BLOCK)
+        self.inner_tar = super().__enter__()
+        return self.inner_tar
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        """Close file."""
+        super().__exit__(exc_type, exc_value, traceback)
+        outer_tar = self.outer_tar
+        fileobj = outer_tar.fileobj
+        # Pad the outer tar file to a multiple of BLOCKSIZE
+        # in case the inner tar file is not a multiple of BLOCKSIZE
+        size_of_inner_tar = self.inner_tar.offset
+        blocks, remainder = divmod(size_of_inner_tar, tarfile.BLOCKSIZE)
+        if remainder > 0:
+            fileobj.write(tarfile.NUL * (tarfile.BLOCKSIZE - remainder))
+            blocks += 1
+        outer_tar.offset += blocks * tarfile.BLOCKSIZE
+
+        tar_info = tarfile.TarInfo(name=str(self._name))
+        tar_info.size = size_of_inner_tar
+        # Now that we know the size of the inner tar, we seek back
+        # to where we started and re-add the member with the correct size
+        fileobj.seek(self.offset_before_adding_inner_file_header)
+        outer_tar.addfile(tar_info)
+
+        # Finally return to the end of the outer tar file
+        fileobj.seek(outer_tar.offset)
+        self.inner_tar = None
 
 
 def _generate_iv(key: bytes, salt: bytes) -> bytes:
