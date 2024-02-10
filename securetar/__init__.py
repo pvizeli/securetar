@@ -5,7 +5,7 @@ import os
 import tarfile
 from contextlib import contextmanager
 from pathlib import Path, PurePath
-from typing import IO, Any, Generator, Optional
+from typing import IO, Generator, Optional
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import padding
