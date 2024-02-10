@@ -219,9 +219,8 @@ class InnerSecureTarFile(SecureTarFile):
         outer_tar = self.outer_tar
         fileobj = outer_tar.fileobj
 
-        tell_after_adding_inner_file = fileobj.tell()
         size_of_inner_tar = (
-            tell_after_adding_inner_file
+            fileobj.tell()
             - self.tell_before_adding_inner_file_header
             - self.tar_info_header_len
         )
