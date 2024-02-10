@@ -211,7 +211,7 @@ class InnerSecureTarFile(SecureTarFile):
 @contextmanager
 def add_stream(
     tar: tarfile.TarFile, tar_info: tarfile.TarInfo
-) -> Generator[None, None, None]:
+) -> Generator[tarfile.ExFileObject, None, None]:
     """Add a stream to the tarfile.
 
     This only works with uncompressed, unencrypted tar files.
