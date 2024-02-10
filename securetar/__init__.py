@@ -69,9 +69,9 @@ class SecureTarFile:
 
     def create_inner_tar(
         self, name: str, key: Optional[bytes] = None, gzip: bool = True
-    ) -> "InnerSecureTarFile":
+    ) -> "_InnerSecureTarFile":
         """Create inner tar file."""
-        return InnerSecureTarFile(
+        return _InnerSecureTarFile(
             self._tar,
             name=Path(name),
             mode=self._mode,
@@ -168,7 +168,7 @@ class SecureTarFile:
         return round(self._name.stat().st_size / 1_048_576, 2)  # calc mbyte
 
 
-class InnerSecureTarFile(SecureTarFile):
+class _InnerSecureTarFile(SecureTarFile):
     """Handle encrypted files for tarfile library inside another tarfile."""
 
     def __init__(
