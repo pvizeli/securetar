@@ -104,7 +104,7 @@ class SecureTarFile:
             if read_mode:
                 file_mode: int = os.O_RDONLY
             else:
-                file_mode: int = os.O_WRONLY | os.O_CREAT
+                file_mode = os.O_WRONLY | os.O_CREAT
 
             fd = os.open(self._name, file_mode, 0o666)
             self._file = os.fdopen(fd, "rb" if read_mode else "wb")
