@@ -6,7 +6,7 @@ import tarfile
 import time
 from contextlib import contextmanager
 from pathlib import Path, PurePath
-from typing import IO, Generator, Optional
+from typing import BinaryIO, IO, Generator, Optional
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import padding
@@ -192,7 +192,7 @@ class InnerSecureTarFile(SecureTarFile):
             fileobj=fileobj,
         )
         self.outer_tar = outer_tar
-        self.stream: Generator[tarfile.ExFileObject, None, None] | None = None
+        self.stream: Generator[BinaryIO, None, None] | None = None
 
     def __enter__(self) -> tarfile.TarFile:
         """Start context manager tarfile."""
@@ -211,7 +211,7 @@ class InnerSecureTarFile(SecureTarFile):
 @contextmanager
 def add_stream(
     tar: tarfile.TarFile, tar_info: tarfile.TarInfo
-) -> Generator[tarfile.ExFileObject, None, None]:
+) -> Generator[BinaryIO, None, None]:
     """Add a stream to the tarfile.
 
     This only works with uncompressed, unencrypted tar files.
