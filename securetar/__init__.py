@@ -192,7 +192,7 @@ class InnerSecureTarFile(SecureTarFile):
             fileobj=fileobj,
         )
         self.outer_tar = outer_tar
-        self.stream: Generator[None, None, None] | None = None
+        self.stream: Generator[tarfile.ExFileObject, None, None] | None = None
 
     def __enter__(self) -> tarfile.TarFile:
         """Start context manager tarfile."""
