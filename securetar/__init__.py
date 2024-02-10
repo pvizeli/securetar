@@ -170,6 +170,8 @@ class SecureTarFile:
 
 
 class InnerSecureTarFile(SecureTarFile):
+    """Handle encrypted files for tarfile library inside another tarfile."""
+
     def __init__(
         self,
         name: Path,
