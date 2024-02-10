@@ -1,4 +1,5 @@
 """Test Tarfile functions."""
+import gzip
 import io
 import os
 import shutil
@@ -190,7 +191,12 @@ def test_gzipped_tar_inside_tar(tmp_path: Path) -> None:
         tar_file.extractall(path=temp_new)
 
     assert temp_new.is_dir()
-    assert temp_new.joinpath("core.tar.gz").is_file()
+    core_tar_gz = temp_new.joinpath("core.tar.gz")
+    assert core_tar_gz.is_file()
+    compressed = core_tar_gz.read_bytes()
+    uncompressed = gzip.decompress(core_tar_gz.read_bytes())
+    assert len(uncompressed) > len(compressed)
+
     assert temp_new.joinpath("core2.tar.gz").is_file()
     assert temp_new.joinpath("core3.tar.gz").is_file()
     backup_json = temp_new.joinpath("backup.json")
