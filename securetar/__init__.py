@@ -6,7 +6,7 @@ import tarfile
 import time
 from contextlib import contextmanager
 from pathlib import Path, PurePath
-from typing import BinaryIO, IO, Generator, Optional
+from typing import IO, BinaryIO, Generator, Optional
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import padding
