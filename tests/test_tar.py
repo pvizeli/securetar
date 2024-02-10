@@ -1,7 +1,9 @@
 """Test Tarfile functions."""
+import io
 import os
 import shutil
 import tarfile
+import time
 from dataclasses import dataclass
 from pathlib import Path, PurePath
 
@@ -173,6 +175,13 @@ def test_gzipped_tar_inside_tar(tmp_path: Path) -> None:
 
         assert len(outer_tar_file.getmembers()) == 3
 
+        raw_bytes = b'{"test": "test"}'
+        fileobj = io.BytesIO(raw_bytes)
+        tar_info = tarfile.TarInfo(name="backup.json")
+        tar_info.size = len(raw_bytes)
+        tar_info.mtime = time.time()
+        outer_tar_file.addfile(tar_info, fileobj=fileobj)
+
     assert main_tar.exists()
     # Restore
     temp_new = tmp_path.joinpath("new")
@@ -183,6 +192,9 @@ def test_gzipped_tar_inside_tar(tmp_path: Path) -> None:
     assert temp_new.joinpath("core.tar.gz").is_file()
     assert temp_new.joinpath("core2.tar.gz").is_file()
     assert temp_new.joinpath("core3.tar.gz").is_file()
+    backup_json = temp_new.joinpath("backup.json")
+    assert backup_json.is_file()
+    assert backup_json.read_bytes() == raw_bytes
 
     # Extract inner tars
     for inner_tgz in inner_tgz_files:
