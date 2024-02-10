@@ -181,6 +181,7 @@ def test_gzipped_tar_inside_tar(tmp_path: Path) -> None:
         tar_info.size = len(raw_bytes)
         tar_info.mtime = time.time()
         outer_tar_file.addfile(tar_info, fileobj=fileobj)
+        assert len(outer_tar_file.getmembers()) == 4
 
     assert main_tar.exists()
     # Restore
