@@ -4,6 +4,7 @@ import logging
 import os
 import tarfile
 import time
+from contextlib import contextmanager
 from pathlib import Path, PurePath
 from typing import IO, Generator, Optional
 
@@ -190,57 +191,75 @@ class InnerSecureTarFile(SecureTarFile):
             bufsize=bufsize,
             fileobj=fileobj,
         )
-        self.tell_before_adding_inner_file_header: Optional[int] = None
         self.outer_tar = outer_tar
-        self.inner_tar: Optional[tarfile.TarFile] = None
-        self.tar_info = tarfile.TarInfo(name=str(self._name))
-        self.tar_info_header_len: Optional[int] = None
+        self.stream: Generator[None, None, None] | None = None
 
     def __enter__(self) -> tarfile.TarFile:
         """Start context manager tarfile."""
-        outer_tar = self.outer_tar
-        fileobj = outer_tar.fileobj
+        fileobj = self.outer_tar.fileobj
         self.tell_before_adding_inner_file_header = fileobj.tell()
         # Write an empty header for the inner tar file
         # We'll seek back to this position later to update the header with the correct size
-        tar_info = self.tar_info
+        tar_info = tarfile.TarInfo(name=str(self._name))
         tar_info.mtime = time.time()
-        tar_info_header = tar_info.tobuf(
-            outer_tar.format, outer_tar.encoding, outer_tar.errors
-        )
-        self.tar_info_header_len = len(tar_info_header)
-        fileobj.write(tar_info_header)
-        self.inner_tar = super().__enter__()
-        return self.inner_tar
+        self.stream = add_stream(self.outer_tar, tar_info)
+        self.stream.__enter__()
+        return super().__enter__()
 
     def __exit__(self, exc_type, exc_value, traceback) -> None:
         """Close file."""
         super().__exit__(exc_type, exc_value, traceback)
-        outer_tar = self.outer_tar
-        fileobj = outer_tar.fileobj
+        self.stream.__exit__(exc_type, exc_value, traceback)
 
+
+@contextmanager
+def add_stream(
+    tar: tarfile.TarFile, tar_info: tarfile.TarInfo
+) -> Generator[None, None, None]:
+    """Add a stream to the tarfile.
+
+    This only works with uncompressed, unencrypted tar files.
+
+    The typical usage is:
+
+    with add_stream(tar, tar_info) as fileobj:
+        fileobj.write(data)
+    """
+    fileobj = tar.fileobj
+    tell_before_adding_inner_file_header = fileobj.tell()
+    # Write an empty header for the inner tar file
+    # We'll seek back to this position later to update the header with the correct size
+    tar_info_header = tar_info.tobuf(tar.format, tar.encoding, tar.errors)
+    tar_info_header_len = len(tar_info_header)
+    fileobj.write(tar_info_header)
+    try:
+        yield fileobj
+    except Exception:  # pylint: disable=broad-except
+        raise
+    finally:
+        tell_after_writing_inner_tar = fileobj.tell()
         size_of_inner_tar = (
-            fileobj.tell()
-            - self.tell_before_adding_inner_file_header
-            - self.tar_info_header_len
+            tell_after_writing_inner_tar
+            - tell_before_adding_inner_file_header
+            - tar_info_header_len
         )
         # Pad the outer tar file to a multiple of BLOCKSIZE
         # in case the inner tar file is not a multiple of BLOCKSIZE
         blocks, remainder = divmod(size_of_inner_tar, tarfile.BLOCKSIZE)
+        padding_size = 0
         if remainder > 0:
-            fileobj.write(tarfile.NUL * (tarfile.BLOCKSIZE - remainder))
+            padding_size = tarfile.BLOCKSIZE - remainder
+            fileobj.write(tarfile.NUL * padding_size)
             blocks += 1
-        outer_tar.offset += blocks * tarfile.BLOCKSIZE
+        tar.offset += size_of_inner_tar + padding_size
 
-        tar_info = self.tar_info
         tar_info.size = size_of_inner_tar
         # Now that we know the size of the inner tar, we seek back
         # to where we started and re-add the member with the correct size
-        fileobj.seek(self.tell_before_adding_inner_file_header)
-        outer_tar.addfile(tar_info)
+        fileobj.seek(tell_before_adding_inner_file_header)
+        tar.addfile(tar_info)
         # Finally return to the end of the outer tar file
-        fileobj.seek(outer_tar.offset)
-        self.inner_tar = None
+        fileobj.seek(tell_after_writing_inner_tar + padding_size)
 
 
 def _generate_iv(key: bytes, salt: bytes) -> bytes:

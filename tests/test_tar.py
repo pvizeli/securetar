@@ -12,6 +12,7 @@ import pytest
 
 from securetar import (
     SecureTarFile,
+    add_stream,
     _is_excluded_by_filter,
     atomic_contents_add,
     secure_path,
@@ -373,3 +374,29 @@ def test_outer_tar_must_not_be_compressed(tmp_path: Path) -> None:
         with outer_secure_tar_file:
             with outer_secure_tar_file.create_inner_tar("any.tgz", gzip=True):
                 pass
+
+
+
+def test_tar_stream(tmp_path: Path) -> None:
+    # Prepare test folder
+    temp_orig = tmp_path.joinpath("orig")
+    fixture_data = Path(__file__).parent.joinpath("fixtures/tar_data")
+    shutil.copytree(fixture_data, temp_orig, symlinks=True)
+
+    # Create Tarfile
+    main_tar = tmp_path.joinpath("backup.tar")
+
+    with SecureTarFile(main_tar, "w", gzip=False) as tar_file:
+        tar_info = tarfile.TarInfo(name="test.txt")
+        with add_stream(tar_file, tar_info) as stream:
+            stream.write(b"test")
+
+    # Restore
+    temp_new = tmp_path.joinpath("new")
+    with SecureTarFile(main_tar, "r", gzip=False) as tar_file:
+        tar_file.extractall(path=temp_new)
+
+    assert temp_new.is_dir()
+    test_file = temp_new.joinpath("test.txt")
+    assert test_file.is_file()
+    assert test_file.read_bytes() == b"test"
