@@ -3,6 +3,7 @@ import hashlib
 import logging
 import os
 import tarfile
+import time
 from pathlib import Path, PurePath
 from typing import IO, Any, Generator, Optional
 
@@ -221,6 +222,7 @@ class InnerSecureTarFile(SecureTarFile):
 
         tar_info = tarfile.TarInfo(name=str(self._name))
         tar_info.size = size_of_inner_tar
+        tar_info.mtime = time.time()
         # Now that we know the size of the inner tar, we seek back
         # to where we started and re-add the member with the correct size
         fileobj.seek(self.offset_before_adding_inner_file_header)
