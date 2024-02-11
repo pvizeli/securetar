@@ -195,7 +195,7 @@ class _InnerSecureTarFile(SecureTarFile):
     def __enter__(self) -> tarfile.TarFile:
         """Start context manager tarfile."""
         tar_info = tarfile.TarInfo(name=str(self._name))
-        tar_info.mtime = time.time()
+        tar_info.mtime = int(time.time())
         self.stream = _add_stream(self.outer_tar, tar_info)
         self.stream.__enter__()
         return super().__enter__()
