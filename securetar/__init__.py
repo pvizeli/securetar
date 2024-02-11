@@ -228,8 +228,6 @@ def add_stream(
     fileobj.write(tar_info_header)
     try:
         yield fileobj
-    except Exception:  # pylint: disable=broad-except
-        raise
     finally:
         tell_after_writing_inner_tar = fileobj.tell()
         size_of_inner_tar = (
