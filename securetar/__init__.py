@@ -196,7 +196,7 @@ class _InnerSecureTarFile(SecureTarFile):
         """Start context manager tarfile."""
         tar_info = tarfile.TarInfo(name=str(self._name))
         tar_info.mtime = time.time()
-        self.stream = add_stream(self.outer_tar, tar_info)
+        self.stream = _add_stream(self.outer_tar, tar_info)
         self.stream.__enter__()
         return super().__enter__()
 
@@ -207,7 +207,7 @@ class _InnerSecureTarFile(SecureTarFile):
 
 
 @contextmanager
-def add_stream(
+def _add_stream(
     tar: tarfile.TarFile, tar_info: tarfile.TarInfo
 ) -> Generator[BinaryIO, None, None]:
     """Add a stream to the tarfile.
@@ -216,8 +216,12 @@ def add_stream(
 
     The typical usage is:
 
-    with add_stream(tar, tar_info) as fileobj:
+    with _add_stream(tar, tar_info) as fileobj:
         fileobj.write(data)
+
+    It is critical that the tar_info is not modified
+    inside the context manager, as the tar file header
+    size may change.
     """
     fileobj = tar.fileobj
     tell_before_adding_inner_file_header = fileobj.tell()

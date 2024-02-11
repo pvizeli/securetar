@@ -13,7 +13,7 @@ import pytest
 from securetar import (
     SecureTarFile,
     _is_excluded_by_filter,
-    add_stream,
+    _add_stream,
     atomic_contents_add,
     secure_path,
 )
@@ -387,7 +387,7 @@ def test_tar_stream(tmp_path: Path) -> None:
 
     with SecureTarFile(main_tar, "w", gzip=False) as tar_file:
         tar_info = tarfile.TarInfo(name="test.txt")
-        with add_stream(tar_file, tar_info) as stream:
+        with _add_stream(tar_file, tar_info) as stream:
             stream.write(b"test")
 
     # Restore
