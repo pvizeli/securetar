@@ -1,4 +1,5 @@
 """Tarfile fileobject handler for encrypted files."""
+
 import hashlib
 import logging
 import os
