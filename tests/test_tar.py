@@ -376,7 +376,10 @@ def test_outer_tar_must_not_be_compressed(tmp_path: Path) -> None:
             with outer_secure_tar_file.create_inner_tar("any.tgz", gzip=True):
                 pass
 
-@pytest.mark.parametrize("format", [tarfile.PAX_FORMAT, tarfile.GNU_FORMAT, tarfile.USTAR_FORMAT])
+
+@pytest.mark.parametrize(
+    "format", [tarfile.PAX_FORMAT, tarfile.GNU_FORMAT, tarfile.USTAR_FORMAT]
+)
 def test_tar_stream(tmp_path: Path, format: int) -> None:
     # Prepare test folder
     temp_orig = tmp_path.joinpath("orig")
@@ -386,8 +389,7 @@ def test_tar_stream(tmp_path: Path, format: int) -> None:
     # Create Tarfile
     main_tar = tmp_path.joinpath("backup.tar")
 
-    with patch.object(tarfile,"DEFAULT_FORMAT", format):
-
+    with patch.object(tarfile, "DEFAULT_FORMAT", format):
         with SecureTarFile(main_tar, "w", gzip=False) as tar_file:
             tar_info = tarfile.TarInfo(name="test.txt")
             with _add_stream(tar_file, tar_info) as stream:
