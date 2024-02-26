@@ -201,7 +201,7 @@ class _InnerSecureTarFile(SecureTarFile):
             # a PAX header to be written.
             #
             # This is necessary to
-            # handle large files as TarInfo.to_buf will try to
+            # handle large files as TarInfo.tobuf will try to
             # use a shorter ustar header if we do not have at
             # least one float in the tarinfo.
             # https://github.com/python/cpython/blob/53b84e772cac6e4a55cebf908d6bb9c48fe254dc/Lib/tarfile.py#L1066
