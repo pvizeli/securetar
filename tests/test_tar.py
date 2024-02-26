@@ -8,7 +8,7 @@ import tarfile
 import time
 from dataclasses import dataclass
 from pathlib import Path, PurePath
-
+from unittest.mock import patch
 import pytest
 
 from securetar import (
@@ -377,7 +377,10 @@ def test_outer_tar_must_not_be_compressed(tmp_path: Path) -> None:
                 pass
 
 
-def test_tar_stream(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "format", [tarfile.PAX_FORMAT, tarfile.GNU_FORMAT, tarfile.USTAR_FORMAT]
+)
+def test_tar_stream(tmp_path: Path, format: int) -> None:
     # Prepare test folder
     temp_orig = tmp_path.joinpath("orig")
     fixture_data = Path(__file__).parent.joinpath("fixtures/tar_data")
@@ -386,17 +389,18 @@ def test_tar_stream(tmp_path: Path) -> None:
     # Create Tarfile
     main_tar = tmp_path.joinpath("backup.tar")
 
-    with SecureTarFile(main_tar, "w", gzip=False) as tar_file:
-        tar_info = tarfile.TarInfo(name="test.txt")
-        with _add_stream(tar_file, tar_info) as stream:
-            stream.write(b"test")
+    with patch.object(tarfile, "DEFAULT_FORMAT", format):
+        with SecureTarFile(main_tar, "w", gzip=False) as tar_file:
+            tar_info = tarfile.TarInfo(name="test.txt")
+            with _add_stream(tar_file, tar_info) as stream:
+                stream.write(b"test")
 
-    # Restore
-    temp_new = tmp_path.joinpath("new")
-    with SecureTarFile(main_tar, "r", gzip=False) as tar_file:
-        tar_file.extractall(path=temp_new)
+        # Restore
+        temp_new = tmp_path.joinpath("new")
+        with SecureTarFile(main_tar, "r", gzip=False) as tar_file:
+            tar_file.extractall(path=temp_new)
 
-    assert temp_new.is_dir()
-    test_file = temp_new.joinpath("test.txt")
-    assert test_file.is_file()
-    assert test_file.read_bytes() == b"test"
+        assert temp_new.is_dir()
+        test_file = temp_new.joinpath("test.txt")
+        assert test_file.is_file()
+        assert test_file.read_bytes() == b"test"
