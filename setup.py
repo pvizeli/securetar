@@ -8,7 +8,7 @@ MIN_PY_VERSION = "3.9"
 
 setup(
     name="securetar",
-    version="2024.2.0",
+    version="2024.2.1",
     license="Apache License 2.0",
     url="https://github.com/pvizeli/securetar",
     author="Pascal Vizeli",
