@@ -84,7 +84,7 @@ def test_is_exclude_by_filter_bad() -> None:
 def test_create_pure_tar(
     tmp_path: Path,
     bufsize: int,
-    pax_headers_create: dict[str, str] | None,
+    pax_headers_create: Optional[dict[str, str]],
     pax_headers_read: dict[str, str],
 ) -> None:
     """Test to create a tar file without encryption."""
