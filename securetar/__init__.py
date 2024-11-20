@@ -39,7 +39,7 @@ class SecureTarFile:
         gzip: bool = True,
         bufsize: int = DEFAULT_BUFSIZE,
         fileobj: Optional[IO[bytes]] = None,
-        pax_headers: dict[str, str] | None = None,
+        pax_headers: Optional[dict[str, str]] = None,
     ) -> None:
         """Initialize encryption handler."""
         self._file: Optional[IO[bytes]] = None
