@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name        = "securetar"
+version     = "2024.2.1"
+license     = {text = "Apache-2.0"}
+description = "Python module to handle tarfile backups."
+readme      = "README.md"
+authors     = [{name = "Pascal Vizeli", email = "pvizeli@syshack.ch"}]
+classifiers = [
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+requires-python = ">=3.9.0"
+dynamic = ["dependencies"]
+
+[project.urls]
+Homepage = "https://github.com/pvizeli/securetar"
+
+[tool.setuptools.dynamic]
+dependencies = {file = "requirements.txt"}
+
+[tool.setuptools.packages.find]
+include = ["securetar*"]
