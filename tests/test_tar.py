@@ -8,6 +8,7 @@ import tarfile
 import time
 from dataclasses import dataclass
 from pathlib import Path, PurePath
+from typing import Optional
 from unittest.mock import patch
 import pytest
 
@@ -77,7 +78,16 @@ def test_is_exclude_by_filter_bad() -> None:
 
 
 @pytest.mark.parametrize("bufsize", [10240, 4 * 2**20])
-def test_create_pure_tar(tmp_path: Path, bufsize: int) -> None:
+@pytest.mark.parametrize(
+    ("pax_headers_create", "pax_headers_read"),
+    [(None, {}), ({}, {}), ({"bla": "blu"}, {"bla": "blu"})],
+)
+def test_create_pure_tar(
+    tmp_path: Path,
+    bufsize: int,
+    pax_headers_create: Optional[dict[str, str]],
+    pax_headers_read: dict[str, str],
+) -> None:
     """Test to create a tar file without encryption."""
     # Prepare test folder
     temp_orig = tmp_path.joinpath("orig")
@@ -86,7 +96,9 @@ def test_create_pure_tar(tmp_path: Path, bufsize: int) -> None:
 
     # Create Tarfile
     temp_tar = tmp_path.joinpath("backup.tar")
-    with SecureTarFile(temp_tar, "w", bufsize=bufsize) as tar_file:
+    with SecureTarFile(
+        temp_tar, "w", bufsize=bufsize, pax_headers=pax_headers_create
+    ) as tar_file:
         atomic_contents_add(
             tar_file,
             temp_orig,
@@ -99,6 +111,7 @@ def test_create_pure_tar(tmp_path: Path, bufsize: int) -> None:
     # Restore
     temp_new = tmp_path.joinpath("new")
     with SecureTarFile(temp_tar, "r", bufsize=bufsize) as tar_file:
+        assert tar_file.pax_headers == pax_headers_read
         tar_file.extractall(path=temp_new, members=tar_file)
 
     assert temp_new.is_dir()
@@ -115,7 +128,16 @@ def test_create_pure_tar(tmp_path: Path, bufsize: int) -> None:
 
 
 @pytest.mark.parametrize("bufsize", [10240, 4 * 2**20])
-def test_create_encrypted_tar(tmp_path: Path, bufsize: int) -> None:
+@pytest.mark.parametrize(
+    ("pax_headers_create", "pax_headers_read"),
+    [(None, {}), ({}, {}), ({"bla": "blu"}, {"bla": "blu"})],
+)
+def test_create_encrypted_tar(
+    tmp_path: Path,
+    bufsize: int,
+    pax_headers_create: dict[str, str] | None,
+    pax_headers_read: dict[str, str],
+) -> None:
     """Test to create a tar file with encryption."""
     key = os.urandom(16)
 
@@ -126,7 +148,9 @@ def test_create_encrypted_tar(tmp_path: Path, bufsize: int) -> None:
 
     # Create Tarfile
     temp_tar = tmp_path.joinpath("backup.tar")
-    with SecureTarFile(temp_tar, "w", key=key, bufsize=bufsize) as tar_file:
+    with SecureTarFile(
+        temp_tar, "w", key=key, bufsize=bufsize, pax_headers=pax_headers_create
+    ) as tar_file:
         atomic_contents_add(
             tar_file,
             temp_orig,
@@ -139,6 +163,7 @@ def test_create_encrypted_tar(tmp_path: Path, bufsize: int) -> None:
     # Restore
     temp_new = tmp_path.joinpath("new")
     with SecureTarFile(temp_tar, "r", key=key, bufsize=bufsize) as tar_file:
+        assert tar_file.pax_headers == pax_headers_read
         tar_file.extractall(path=temp_new, members=tar_file)
 
     assert temp_new.is_dir()
