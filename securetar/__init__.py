@@ -1,4 +1,5 @@
 """Tarfile fileobject handler for encrypted files."""
+
 from __future__ import annotations
 
 from collections.abc import Generator
