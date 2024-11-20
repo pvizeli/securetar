@@ -1,5 +1,7 @@
 """Tarfile fileobject handler for encrypted files."""
+from __future__ import annotations
 
+from collections.abc import Generator
 import hashlib
 import logging
 import os
@@ -7,7 +9,7 @@ import tarfile
 import time
 from contextlib import contextmanager
 from pathlib import Path, PurePath
-from typing import IO, BinaryIO, Generator, Optional
+from typing import IO, BinaryIO
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import padding
@@ -35,13 +37,13 @@ class SecureTarFile:
         self,
         name: Path,
         mode: str,
-        key: Optional[bytes] = None,
+        key: bytes | None = None,
         gzip: bool = True,
         bufsize: int = DEFAULT_BUFSIZE,
-        fileobj: Optional[IO[bytes]] = None,
+        fileobj: IO[bytes] | None = None,
     ) -> None:
         """Initialize encryption handler."""
-        self._file: Optional[IO[bytes]] = None
+        self._file: IO[bytes] | None = None
         self._mode: str = mode
         self._name: Path = name
         self._bufsize: int = bufsize
@@ -49,7 +51,7 @@ class SecureTarFile:
         self._fileobj = fileobj
 
         # Tarfile options
-        self._tar: Optional[tarfile.TarFile] = None
+        self._tar: tarfile.TarFile | None = None
         if key:
             self._tar_mode = f"{mode}|"
         else:
@@ -61,15 +63,15 @@ class SecureTarFile:
             self._tar_mode = self._tar_mode + "gz"
 
         # Encryption/Description
-        self._aes: Optional[Cipher] = None
-        self._key: Optional[bytes] = key
+        self._aes: Cipher | None = None
+        self._key: bytes | None = key
 
         # Function helper
-        self._decrypt: Optional[CipherContext] = None
-        self._encrypt: Optional[CipherContext] = None
+        self._decrypt: CipherContext | None = None
+        self._encrypt: CipherContext | None = None
 
     def create_inner_tar(
-        self, name: str, key: Optional[bytes] = None, gzip: bool = True
+        self, name: str, key: bytes | None = None, gzip: bool = True
     ) -> "_InnerSecureTarFile":
         """Create inner tar file."""
         return _InnerSecureTarFile(
@@ -177,7 +179,7 @@ class _InnerSecureTarFile(SecureTarFile):
         outer_tar: tarfile.TarFile,
         name: Path,
         mode: str,
-        key: Optional[bytes] = None,
+        key: bytes | None = None,
         gzip: bool = True,
         bufsize: int = DEFAULT_BUFSIZE,
     ) -> None:
