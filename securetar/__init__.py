@@ -265,7 +265,13 @@ def _add_stream(
         # Now that we know the size of the inner tar, we seek back
         # to where we started and re-add the member with the correct size
         fileobj.seek(tell_before_adding_inner_file_header)
-        tar.addfile(tar_info)
+        # We can't call tar.addfile here because it doesn't allow a non-zero
+        # size to be set without passing a fileobj. Instead we manually write
+        # the header. https://github.com/python/cpython/pull/117988
+        buf = tar_info.tobuf(tar.format, tar.encoding, tar.errors)
+        tar.fileobj.write(buf)
+        tar.offset += len(buf)
+        tar.members.append(tar_info)
         # Finally return to the end of the outer tar file
         fileobj.seek(tell_after_writing_inner_tar + padding_size)
 
