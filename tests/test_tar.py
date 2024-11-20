@@ -8,6 +8,7 @@ import tarfile
 import time
 from dataclasses import dataclass
 from pathlib import Path, PurePath
+from typing import Optional
 from unittest.mock import patch
 import pytest
 
