@@ -140,6 +140,21 @@ def test_create_encrypted_tar(tmp_path: Path, bufsize: int) -> None:
 
     assert temp_tar.exists()
 
+    # Iterate over the tar file
+    files = set()
+    with SecureTarFile(temp_tar, "r", key=key, bufsize=bufsize) as tar_file:
+        for tarInfo in tar_file:
+            files.add(tarInfo.name)
+    assert files == {
+        ".",
+        "README.md",
+        "randbytes1",
+        "randbytes2",
+        "test_symlink",
+        "test1",
+        "test1/script.sh",
+    }
+
     # Restore
     temp_new = tmp_path.joinpath("new")
     with SecureTarFile(temp_tar, "r", key=key, bufsize=bufsize) as tar_file:
