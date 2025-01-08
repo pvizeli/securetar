@@ -114,7 +114,7 @@ def test_create_pure_tar(tmp_path: Path, bufsize: int) -> None:
     assert temp_new.joinpath("README.md").is_file()
 
 
-@pytest.mark.parametrize("bufsize", [10240, 4 * 2**20])
+@pytest.mark.parametrize("bufsize", [333, 10240, 4 * 2**20])
 def test_create_encrypted_tar(tmp_path: Path, bufsize: int) -> None:
     """Test to create a tar file with encryption."""
     key = os.urandom(16)
@@ -123,6 +123,10 @@ def test_create_encrypted_tar(tmp_path: Path, bufsize: int) -> None:
     temp_orig = tmp_path.joinpath("orig")
     fixture_data = Path(__file__).parent.joinpath("fixtures/tar_data")
     shutil.copytree(fixture_data, temp_orig, symlinks=True)
+    with open(temp_orig / "randbytes1", "wb") as file:
+        file.write(os.urandom(12345))
+    with open(temp_orig / "randbytes2", "wb") as file:
+        file.write(os.urandom(12345))
 
     # Create Tarfile
     temp_tar = tmp_path.joinpath("backup.tar")
@@ -145,6 +149,8 @@ def test_create_encrypted_tar(tmp_path: Path, bufsize: int) -> None:
     assert temp_new.joinpath("test_symlink").is_symlink()
     assert temp_new.joinpath("test1").is_dir()
     assert temp_new.joinpath("test1/script.sh").is_file()
+    assert temp_new.joinpath("randbytes1").is_file()
+    assert temp_new.joinpath("randbytes2").is_file()
 
     # 775 is correct for local, but in GitHub action it's 755, both is fine
     assert oct(temp_new.joinpath("test1/script.sh").stat().st_mode)[-3:] in [

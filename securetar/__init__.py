@@ -70,6 +70,7 @@ class SecureTarFile:
         # Function helper
         self._decrypt: CipherContext | None = None
         self._encrypt: CipherContext | None = None
+        self._padder: padding.PaddingContext | None = None
 
     def create_inner_tar(
         self, name: str, key: bytes | None = None, gzip: bool = True
@@ -128,6 +129,7 @@ class SecureTarFile:
 
         self._decrypt = self._aes.decryptor()
         self._encrypt = self._aes.encryptor()
+        self._padder = padding.PKCS7(BLOCK_SIZE_BITS).padder()
 
         self._tar = tarfile.open(
             fileobj=self,
@@ -143,16 +145,15 @@ class SecureTarFile:
             self._tar.close()
             self._tar = None
         if self._file:
+            if not self._mode.startswith("r"):
+                self._file.write(self._encrypt.update(self._padder.finalize()))
             if not self._fileobj:
                 self._file.close()
             self._file = None
 
     def write(self, data: bytes) -> None:
         """Write data."""
-        if len(data) % BLOCK_SIZE != 0:
-            padder = padding.PKCS7(BLOCK_SIZE_BITS).padder()
-            data = padder.update(data) + padder.finalize()
-
+        data = self._padder.update(data)
         self._file.write(self._encrypt.update(data))
 
     def read(self, size: int = 0) -> bytes:
