@@ -348,7 +348,9 @@ def test_encrypted_gzipped_tar_inside_tar(tmp_path: Path, bufsize: int) -> None:
     file_sizes: dict[str, int] = {}
     with SecureTarFile(main_tar, "r", gzip=False, bufsize=bufsize) as tar_file:
         for tar_info in tar_file:
-            file_sizes[tar_info.name] = tar_info.pax_headers["_securetar.plaintext_size"]
+            file_sizes[tar_info.name] = tar_info.pax_headers[
+                "_securetar.plaintext_size"
+            ]
     assert set(file_sizes) == {
         "core.tar.gz",
         "core2.tar.gz",
