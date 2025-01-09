@@ -25,7 +25,10 @@ _LOGGER: logging.Logger = logging.getLogger(__name__)
 
 BLOCK_SIZE = 16
 BLOCK_SIZE_BITS = 128
+IV_SIZE = BLOCK_SIZE
 DEFAULT_BUFSIZE = 10240
+
+PLAINTEXT_SIZE_HEADER = "_securetar.plaintext_size"
 
 MOD_READ = "r"
 MOD_WRITE = "w"
@@ -128,9 +131,9 @@ class SecureTarFile:
     def _setup_cipher(self) -> None:
         # Extract IV for CBC
         if self._mode == MOD_READ:
-            cbc_rand = self._file.read(16)
+            cbc_rand = self._file.read(IV_SIZE)
         else:
-            cbc_rand = os.urandom(16)
+            cbc_rand = os.urandom(IV_SIZE)
             self._file.write(cbc_rand)
 
         # Create Cipher
@@ -188,7 +191,7 @@ class SecureTarFile:
 
                 data = self._parent.read(size)
                 self._pos += len(data)
-                if not data or self._size - self._pos > 16:
+                if not data or self._size - self._pos > BLOCK_SIZE:
                     return data
 
                 # Last block, read tail and discard padding
@@ -323,7 +326,9 @@ def _add_stream(
         if padding:
             tar_info.pax_headers = {
                 **tar_info.pax_headers,
-                "_securetar.plaintext_size": str(size_of_inner_tar - len(padding) - 16),
+                # The plaintext size is the size of the written ciphertext
+                # minus the size of the padding and the IV
+                PLAINTEXT_SIZE_HEADER: str(size_of_inner_tar - len(padding) - IV_SIZE),
             }
         # Now that we know the size of the inner tar, we seek back
         # to where we started and re-add the member with the correct size
@@ -344,7 +349,7 @@ def _generate_iv(key: bytes, salt: bytes) -> bytes:
     temp_iv = key + salt
     for _ in range(100):
         temp_iv = hashlib.sha256(temp_iv).digest()
-    return temp_iv[:16]
+    return temp_iv[:IV_SIZE]
 
 
 def secure_path(tar: tarfile.TarFile) -> Generator[tarfile.TarInfo, None, None]:
