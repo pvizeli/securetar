@@ -370,13 +370,14 @@ def test_encrypted_gzipped_tar_inside_tar(tmp_path: Path, bufsize: int) -> None:
             # Check the tar file can be opened and iterate over it
             files = set()
             with tarfile.open(inner_tar_path, "r:gz") as inner_tar_file:
-                for tarInfo in tar_file:
-                    for tarInfo in tar_file:
-                        files.add(tarInfo.name)
+                for tar_info in inner_tar_file:
+                    files.add(tar_info.name)
             assert files == {
-                "core.tar.gz",
-                "core2.tar.gz",
-                "core3.tar.gz",
+                ".",
+                "README.md",
+                "test1",
+                "test1/script.sh",
+                "test_symlink",
             }
 
     # Restore
