@@ -71,6 +71,7 @@ class SecureTarFile:
         self._decrypt: CipherContext | None = None
         self._encrypt: CipherContext | None = None
         self._padder: padding.PaddingContext | None = None
+        self._padding = bytearray()
 
     def create_inner_tar(
         self, name: str, key: bytes | None = None, gzip: bool = True
@@ -154,7 +155,8 @@ class SecureTarFile:
         """Close file."""
         if self._file:
             if not self._mode.startswith("r"):
-                self._file.write(self._encrypt.update(self._padder.finalize()))
+                self._padding += self._padder.finalize()
+                self._file.write(self._encrypt.update(self._padding))
             if not self._fileobj:
                 self._file.close()
             self._file = None
@@ -264,7 +266,7 @@ class _InnerSecureTarFile(SecureTarFile):
             tar_info.mtime = time.time()
         else:
             tar_info.mtime = int(time.time())
-        self.stream = _add_stream(self.outer_tar, tar_info)
+        self.stream = _add_stream(self.outer_tar, tar_info, self._padding)
         self.stream.__enter__()
         return super().__enter__()
 
@@ -276,7 +278,7 @@ class _InnerSecureTarFile(SecureTarFile):
 
 @contextmanager
 def _add_stream(
-    tar: tarfile.TarFile, tar_info: tarfile.TarInfo
+    tar: tarfile.TarFile, tar_info: tarfile.TarInfo, padding: bytearray
 ) -> Generator[BinaryIO, None, None]:
     """Add a stream to the tarfile.
 
@@ -318,6 +320,11 @@ def _add_stream(
         tar.offset += size_of_inner_tar + padding_size
 
         tar_info.size = size_of_inner_tar
+        if padding:
+            tar_info.pax_headers = {
+                **tar_info.pax_headers,
+                "_securetar.plaintext_size": str(size_of_inner_tar - len(padding) - 16),
+            }
         # Now that we know the size of the inner tar, we seek back
         # to where we started and re-add the member with the correct size
         fileobj.seek(tell_before_adding_inner_file_header)

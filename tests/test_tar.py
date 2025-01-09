@@ -344,6 +344,17 @@ def test_encrypted_gzipped_tar_inside_tar(tmp_path: Path, bufsize: int) -> None:
 
     assert main_tar.exists()
 
+    # Iterate over the tar file
+    file_sizes: dict[str, int] = {}
+    with SecureTarFile(main_tar, "r", gzip=False, bufsize=bufsize) as tar_file:
+        for tar_info in tar_file:
+            file_sizes[tar_info.name] = tar_info.pax_headers["_securetar.plaintext_size"]
+    assert set(file_sizes) == {
+        "core.tar.gz",
+        "core2.tar.gz",
+        "core3.tar.gz",
+    }
+
     # Decrypt the inner tar
     temp_decrypted = tmp_path.joinpath("decrypted")
     os.makedirs(temp_decrypted, exist_ok=True)
@@ -361,6 +372,9 @@ def test_encrypted_gzipped_tar_inside_tar(tmp_path: Path, bufsize: int) -> None:
                 with istf.decrypt(tar_info) as decrypted:
                     while data := decrypted.read(bufsize):
                         file.write(data)
+
+            # Check the indicated size is correct
+            assert inner_tar_path.stat().st_size == int(file_sizes[tar_info.name])
 
             # Check decrypted file is valid gzip, this fails if the padding is not
             # discarded correctly
@@ -450,7 +464,7 @@ def test_tar_stream(tmp_path: Path, format: int) -> None:
     with patch.object(tarfile, "DEFAULT_FORMAT", format):
         with SecureTarFile(main_tar, "w", gzip=False) as tar_file:
             tar_info = tarfile.TarInfo(name="test.txt")
-            with _add_stream(tar_file, tar_info) as stream:
+            with _add_stream(tar_file, tar_info, bytearray()) as stream:
                 stream.write(b"test")
 
         # Restore
