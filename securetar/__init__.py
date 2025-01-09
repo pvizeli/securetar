@@ -36,8 +36,8 @@ class SecureTarFile:
 
     def __init__(
         self,
-        name: Path | None,
-        mode: str,
+        name: Path | None = None,
+        mode: str = "r",
         key: bytes | None = None,
         gzip: bool = True,
         bufsize: int = DEFAULT_BUFSIZE,
