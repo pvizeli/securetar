@@ -315,7 +315,8 @@ def test_gzipped_tar_inside_tar_failure(tmp_path: Path) -> None:
         tar_file.extractall(path=temp_inner_new, members=tar_file)
 
 
-def test_encrypted_gzipped_tar_inside_tar(tmp_path: Path) -> None:
+@pytest.mark.parametrize("bufsize", [33, 333, 10240, 4 * 2**20])
+def test_encrypted_gzipped_tar_inside_tar(tmp_path: Path, bufsize: int) -> None:
     key = os.urandom(16)
 
     # Prepare test folder
@@ -326,7 +327,7 @@ def test_encrypted_gzipped_tar_inside_tar(tmp_path: Path) -> None:
     # Create Tarfile
     main_tar = tmp_path.joinpath("backup.tar")
     inner_tgz_files = ("core.tar.gz", "core2.tar.gz", "core3.tar.gz")
-    outer_secure_tar_file = SecureTarFile(main_tar, "w", gzip=False)
+    outer_secure_tar_file = SecureTarFile(main_tar, "w", gzip=False, bufsize=bufsize)
     with outer_secure_tar_file as outer_tar_file:
         for inner_tgz_file in inner_tgz_files:
             with outer_secure_tar_file.create_inner_tar(
@@ -342,9 +343,45 @@ def test_encrypted_gzipped_tar_inside_tar(tmp_path: Path) -> None:
         assert len(outer_tar_file.getmembers()) == 3
 
     assert main_tar.exists()
+
+    # Decrypt the inner tar
+    temp_decrypted = tmp_path.joinpath("decrypted")
+    os.makedirs(temp_decrypted, exist_ok=True)
+    with SecureTarFile(main_tar, "r", gzip=False, bufsize=bufsize) as tar_file:
+        for tar_info in tar_file:
+            istf = SecureTarFile(
+                None,
+                gzip=False,  # We decrypt the compressed tar
+                key=key,
+                mode="r",
+                fileobj=tar_file.extractfile(tar_info),
+            )
+            inner_tar_path = temp_decrypted.joinpath(tar_info.name)
+            with open(inner_tar_path, "wb") as file:
+                with istf.decrypt(tar_info) as decrypted:
+                    while data := decrypted.read(bufsize):
+                        file.write(data)
+
+            # Check decrypted file is valid gzip, this fails if the padding is not
+            # discarded correctly
+            assert inner_tar_path.stat().st_size > 0
+            gzip.decompress(inner_tar_path.read_bytes())
+
+            # Check the tar file can be opened and iterate over it
+            files = set()
+            with tarfile.open(inner_tar_path, "r:gz") as inner_tar_file:
+                for tarInfo in tar_file:
+                    for tarInfo in tar_file:
+                        files.add(tarInfo.name)
+            assert files == {
+                "core.tar.gz",
+                "core2.tar.gz",
+                "core3.tar.gz",
+            }
+
     # Restore
     temp_new = tmp_path.joinpath("new")
-    with SecureTarFile(main_tar, "r", gzip=False) as tar_file:
+    with SecureTarFile(main_tar, "r", gzip=False, bufsize=bufsize) as tar_file:
         tar_file.extractall(path=temp_new)
 
     assert temp_new.is_dir()
@@ -357,7 +394,7 @@ def test_encrypted_gzipped_tar_inside_tar(tmp_path: Path) -> None:
         temp_inner_new = tmp_path.joinpath("{inner_tgz}_inner_new")
 
         with SecureTarFile(
-            temp_new.joinpath(inner_tgz), "r", key=key, gzip=True
+            temp_new.joinpath(inner_tgz), "r", key=key, gzip=True, bufsize=bufsize
         ) as tar_file:
             tar_file.extractall(path=temp_inner_new, members=tar_file)
 

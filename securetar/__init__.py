@@ -99,7 +99,18 @@ class SecureTarFile:
             return self._tar
 
         # Encrypted/Decrypted Tarfile
+        self._open_file()
+        self._setup_cipher()
 
+        self._tar = tarfile.open(
+            fileobj=self,
+            mode=self._tar_mode,
+            dereference=False,
+            bufsize=self._bufsize,
+        )
+        return self._tar
+
+    def _open_file(self) -> None:
         if self._fileobj:
             # If we have a fileobj, we don't need to open a file
             self._file = self._fileobj
@@ -113,6 +124,7 @@ class SecureTarFile:
             fd = os.open(self._name, file_mode, 0o666)
             self._file = os.fdopen(fd, "rb" if read_mode else "wb")
 
+    def _setup_cipher(self) -> None:
         # Extract IV for CBC
         if self._mode == MOD_READ:
             cbc_rand = self._file.read(16)
@@ -131,25 +143,65 @@ class SecureTarFile:
         self._encrypt = self._aes.encryptor()
         self._padder = padding.PKCS7(BLOCK_SIZE_BITS).padder()
 
-        self._tar = tarfile.open(
-            fileobj=self,
-            mode=self._tar_mode,
-            dereference=False,
-            bufsize=self._bufsize,
-        )
-        return self._tar
-
     def __exit__(self, exc_type, exc_value, traceback) -> None:
         """Close file."""
         if self._tar:
             self._tar.close()
             self._tar = None
+        self._close_file()
+
+    def _close_file(self) -> None:
+        """Close file."""
         if self._file:
             if not self._mode.startswith("r"):
                 self._file.write(self._encrypt.update(self._padder.finalize()))
             if not self._fileobj:
                 self._file.close()
             self._file = None
+
+    @contextmanager
+    def decrypt(self, tarinfo: tarfile.TarInfo) -> Generator[BinaryIO, None, None]:
+        """Decrypt inner tar.
+
+        This is a helper to decrypt data and discard the padding.
+        """
+
+        class DecryptInnerTar:
+            """Decrypt inner tar file."""
+
+            def __init__(self, parent: SecureTarFile) -> None:
+                """Initialize."""
+                self._parent = parent
+                self._pos = 0
+                self._size = tarinfo.size
+                self._tail = b""
+
+            def read(self, size: int = 0) -> bytes:
+                """Read data."""
+                if self._tail:
+                    # Finish reading tail
+                    data = self._tail[:size]
+                    self._tail = self._tail[size:]
+                    return data
+
+                data = self._parent.read(size)
+                self._pos += len(data)
+                if not data or self._size - self._pos > 16:
+                    return data
+
+                # Last block, read tail and discard padding
+                data += self._parent.read(self._size - self._pos)
+                padding_len = data[-1]
+                data = data[:-padding_len]
+                self._tail = data[size:]
+                return data[:size]
+
+        try:
+            self._open_file()
+            self._setup_cipher()
+            yield DecryptInnerTar(self)
+        finally:
+            self._close_file()
 
     def write(self, data: bytes) -> None:
         """Write data."""
