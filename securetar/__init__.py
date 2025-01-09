@@ -36,8 +36,8 @@ class SecureTarFile:
 
     def __init__(
         self,
-        name: Path,
-        mode: str,
+        name: Path | None = None,
+        mode: str = "r",
         key: bytes | None = None,
         gzip: bool = True,
         bufsize: int = DEFAULT_BUFSIZE,
@@ -46,7 +46,7 @@ class SecureTarFile:
         """Initialize encryption handler."""
         self._file: IO[bytes] | None = None
         self._mode: str = mode
-        self._name: Path = name
+        self._name: Path | None = name
         self._bufsize: int = bufsize
         self._extra_args = {}
         self._fileobj = fileobj
@@ -115,6 +115,8 @@ class SecureTarFile:
             # If we have a fileobj, we don't need to open a file
             self._file = self._fileobj
         else:
+            if not self._name:
+                raise ValueError("No filename or fileobj provided")
             read_mode = self._mode.startswith("r")
             if read_mode:
                 file_mode: int = os.O_RDONLY
