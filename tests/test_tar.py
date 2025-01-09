@@ -373,11 +373,11 @@ def test_encrypted_gzipped_tar_inside_tar(tmp_path: Path, bufsize: int) -> None:
                 for tar_info in inner_tar_file:
                     files.add(tar_info.name)
             assert files == {
-                '.',
-                'README.md',
-                'test1',
-                'test1/script.sh',
-                'test_symlink',
+                ".",
+                "README.md",
+                "test1",
+                "test1/script.sh",
+                "test_symlink",
             }
 
     # Restore
