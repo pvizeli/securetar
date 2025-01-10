@@ -296,7 +296,9 @@ def _add_stream(
     inside the context manager, as the tar file header
     size may change.
 
-    :param padding: PKCS7 padding added at the end of the inner tar. If non-empty,
+    :param tar: The outer tar file to add the stream to.
+    :param tar_info: TarInfo for the added stream.
+    :param padding: PKCS7 padding added at the end of the stream. If non-empty,
     the inner tar is encrypted, and we calculate the plaintext size from the padding
     and add a pax header with the plaintext size. If empty, the inner tar is not
     encrypted and we don't add a plaintext size pax header.
