@@ -295,6 +295,11 @@ def _add_stream(
     It is critical that the tar_info is not modified
     inside the context manager, as the tar file header
     size may change.
+
+    :param padding: PKCS7 padding added at the end of the inner tar. If non-empty,
+    the inner tar is encrypted, and we calculate the plaintext size from the padding
+    and add a pax header with the plaintext size. If empty, the inner tar is not
+    encrypted and we don't add a plaintext size pax header.
     """
     fileobj = tar.fileobj
     tell_before_adding_inner_file_header = fileobj.tell()
