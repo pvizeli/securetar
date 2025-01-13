@@ -29,6 +29,8 @@ IV_SIZE = BLOCK_SIZE
 DEFAULT_BUFSIZE = 10240
 
 PLAINTEXT_SIZE_HEADER = "_securetar.plaintext_size"
+VERSION_HEADER = "_securetar.version"
+SECURETAR_VERSION = "2.0"
 
 MOD_READ = "r"
 MOD_WRITE = "w"
@@ -338,6 +340,7 @@ def _add_stream(
                 # The plaintext size is the size of the written ciphertext
                 # minus the size of the padding and the IV
                 PLAINTEXT_SIZE_HEADER: str(size_of_inner_tar - len(padding) - IV_SIZE),
+                VERSION_HEADER: SECURETAR_VERSION,
             }
         # Now that we know the size of the inner tar, we seek back
         # to where we started and re-add the member with the correct size
