@@ -25,7 +25,10 @@ _LOGGER: logging.Logger = logging.getLogger(__name__)
 
 BLOCK_SIZE = 16
 BLOCK_SIZE_BITS = 128
+IV_SIZE = BLOCK_SIZE
 DEFAULT_BUFSIZE = 10240
+
+PLAINTEXT_SIZE_HEADER = "_securetar.plaintext_size"
 
 MOD_READ = "r"
 MOD_WRITE = "w"
@@ -71,6 +74,7 @@ class SecureTarFile:
         self._decrypt: CipherContext | None = None
         self._encrypt: CipherContext | None = None
         self._padder: padding.PaddingContext | None = None
+        self._padding = bytearray()
 
     def create_inner_tar(
         self, name: str, key: bytes | None = None, gzip: bool = True
@@ -129,9 +133,9 @@ class SecureTarFile:
     def _setup_cipher(self) -> None:
         # Extract IV for CBC
         if self._mode == MOD_READ:
-            cbc_rand = self._file.read(16)
+            cbc_rand = self._file.read(IV_SIZE)
         else:
-            cbc_rand = os.urandom(16)
+            cbc_rand = os.urandom(IV_SIZE)
             self._file.write(cbc_rand)
 
         # Create Cipher
@@ -156,7 +160,8 @@ class SecureTarFile:
         """Close file."""
         if self._file:
             if not self._mode.startswith("r"):
-                self._file.write(self._encrypt.update(self._padder.finalize()))
+                self._padding += self._padder.finalize()
+                self._file.write(self._encrypt.update(self._padding))
             if not self._fileobj:
                 self._file.close()
             self._file = None
@@ -188,7 +193,7 @@ class SecureTarFile:
 
                 data = self._parent.read(size)
                 self._pos += len(data)
-                if not data or self._size - self._pos > 16:
+                if not data or self._size - self._pos > BLOCK_SIZE:
                     return data
 
                 # Last block, read tail and discard padding
@@ -266,7 +271,7 @@ class _InnerSecureTarFile(SecureTarFile):
             tar_info.mtime = time.time()
         else:
             tar_info.mtime = int(time.time())
-        self.stream = _add_stream(self.outer_tar, tar_info)
+        self.stream = _add_stream(self.outer_tar, tar_info, self._padding)
         self.stream.__enter__()
         return super().__enter__()
 
@@ -278,7 +283,7 @@ class _InnerSecureTarFile(SecureTarFile):
 
 @contextmanager
 def _add_stream(
-    tar: tarfile.TarFile, tar_info: tarfile.TarInfo
+    tar: tarfile.TarFile, tar_info: tarfile.TarInfo, padding: bytearray
 ) -> Generator[BinaryIO, None, None]:
     """Add a stream to the tarfile.
 
@@ -292,6 +297,13 @@ def _add_stream(
     It is critical that the tar_info is not modified
     inside the context manager, as the tar file header
     size may change.
+
+    :param tar: The outer tar file to add the stream to.
+    :param tar_info: TarInfo for the added stream.
+    :param padding: PKCS7 padding added at the end of the stream. If non-empty,
+    the inner tar is encrypted, and we calculate the plaintext size from the padding
+    and add a pax header with the plaintext size. If empty, the inner tar is not
+    encrypted and we don't add a plaintext size pax header.
     """
     fileobj = tar.fileobj
     tell_before_adding_inner_file_header = fileobj.tell()
@@ -320,6 +332,13 @@ def _add_stream(
         tar.offset += size_of_inner_tar + padding_size
 
         tar_info.size = size_of_inner_tar
+        if padding:
+            tar_info.pax_headers = {
+                **tar_info.pax_headers,
+                # The plaintext size is the size of the written ciphertext
+                # minus the size of the padding and the IV
+                PLAINTEXT_SIZE_HEADER: str(size_of_inner_tar - len(padding) - IV_SIZE),
+            }
         # Now that we know the size of the inner tar, we seek back
         # to where we started and re-add the member with the correct size
         fileobj.seek(tell_before_adding_inner_file_header)
@@ -339,7 +358,7 @@ def _generate_iv(key: bytes, salt: bytes) -> bytes:
     temp_iv = key + salt
     for _ in range(100):
         temp_iv = hashlib.sha256(temp_iv).digest()
-    return temp_iv[:16]
+    return temp_iv[:IV_SIZE]
 
 
 def secure_path(tar: tarfile.TarFile) -> Generator[tarfile.TarInfo, None, None]:
