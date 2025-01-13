@@ -385,7 +385,7 @@ def _is_excluded_by_filter(path: PurePath, exclude_list: list[str]) -> bool:
     """Filter to filter excludes."""
 
     for exclude in exclude_list:
-        if not path.match(exclude):
+        if not path.full_match(exclude):
             continue
         _LOGGER.debug("Ignoring %s because of %s", path, exclude)
         return True

@@ -48,32 +48,24 @@ def test_not_secure_path() -> None:
     assert [] == list(secure_path(test_list))
 
 
-def test_is_excluded_by_filter_good() -> None:
+def test_is_excluded_by_filter() -> None:
     """Test exclude filter."""
-    filter_list = ["not/match", "/dev/xy"]
+    filter_list = ["not/match", "/dev/xy", "tts/**", "**/.DS_Store"]
     test_list = [
-        PurePath("test.txt"),
-        PurePath("data/xy.blob"),
-        PurePath("bla/blu/ble"),
-        PurePath("data/../xy.blob"),
+        (PurePath("test.txt"), False),
+        (PurePath("data/xy.blob"), False),
+        (PurePath("bla/blu/ble"), False),
+        (PurePath("data/../xy.blob"), False),
+        (PurePath("tts"), False),
+        (PurePath("tts/blah"), True),
+        (PurePath("tts/blah/bleh"), True),
+        (PurePath("data/tts"), False),
+        (PurePath(".DS_Store"), True),
+        (PurePath("data/.DS_Store"), True),
     ]
 
-    for path_object in test_list:
-        assert _is_excluded_by_filter(path_object, filter_list) is False
-
-
-def test_is_exclude_by_filter_bad() -> None:
-    """Test exclude filter."""
-    filter_list = ["*.txt", "data/*", "bla/blu/ble"]
-    test_list = [
-        PurePath("test.txt"),
-        PurePath("data/xy.blob"),
-        PurePath("bla/blu/ble"),
-        PurePath("data/test_files/kk.txt"),
-    ]
-
-    for path_object in test_list:
-        assert _is_excluded_by_filter(path_object, filter_list) is True
+    for path_object, expect_filtered in test_list:
+        assert _is_excluded_by_filter(path_object, filter_list) == expect_filtered
 
 
 @pytest.mark.parametrize("bufsize", [10240, 4 * 2**20])
