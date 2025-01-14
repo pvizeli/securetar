@@ -389,8 +389,8 @@ def atomic_contents_add(
 ) -> None:
     """Append directories and/or files to the TarFile if file_filter returns False.
 
-    :param file_filter: A filter function, should return False if the item should
-    be excluded from the archived. The function should take a single argument, a
+    :param file_filter: A filter function, should return True if the item should
+    be excluded from the archive. The function should take a single argument, a
     pathlib.PurePath object representing the relative path of the item to be archived.
     """
 
