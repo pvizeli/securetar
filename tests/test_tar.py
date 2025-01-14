@@ -13,6 +13,7 @@ import pytest
 
 from securetar import (
     SecureTarFile,
+    SecureTarReadError,
     _add_stream,
     atomic_contents_add,
     secure_path,
@@ -381,6 +382,27 @@ def test_encrypted_tar_inside_tar(
             ]
             assert tar_info.pax_headers["_securetar.version"] == "2.0"
     assert set(file_sizes) == {*inner_tar_files}
+
+    # Decrypt the inner tar with wrong key
+    temp_decrypted = tmp_path.joinpath("decrypted")
+    os.makedirs(temp_decrypted, exist_ok=True)
+    with SecureTarFile(main_tar, "r", gzip=False, bufsize=bufsize) as tar_file:
+        for tar_info in tar_file:
+            istf = SecureTarFile(
+                None,
+                gzip=False,  # We decrypt the compressed tar
+                key=b"wrong_key_abcdef",
+                mode="r",
+                fileobj=tar_file.extractfile(tar_info),
+            )
+            inner_tar_path = temp_decrypted.joinpath(tar_info.name)
+            with open(inner_tar_path, "wb") as file:
+                with istf.decrypt(tar_info) as decrypted:
+                    with pytest.raises(
+                        SecureTarReadError, match="The inner tar is not gzip or tar"
+                    ):
+                        while data := decrypted.read(bufsize):
+                            file.write(data)
 
     # Decrypt the inner tar
     temp_decrypted = tmp_path.joinpath("decrypted")
