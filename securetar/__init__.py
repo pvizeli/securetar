@@ -196,7 +196,7 @@ class SecureTarFile:
                 self._parent = parent
                 self._pos = 0
                 self._size = tarinfo.size - IV_SIZE
-                self._tail = b""
+                self._tail: bytes | None = None
 
             @staticmethod
             def _validate_inner_tar(head: bytes) -> None:
@@ -217,7 +217,7 @@ class SecureTarFile:
                     self._head = self._parent.read(max(size, 512))
                     self._validate_inner_tar(self._head)
 
-                if self._tail:
+                if self._tail is not None:
                     # Finish reading tail
                     data = self._tail[:size]
                     self._tail = self._tail[size:]
