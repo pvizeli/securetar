@@ -13,6 +13,7 @@ import pytest
 
 from securetar import (
     SecureTarFile,
+    SecureTarReadError,
     _add_stream,
     atomic_contents_add,
     secure_path,
@@ -398,7 +399,7 @@ def test_encrypted_tar_inside_tar(
             with open(inner_tar_path, "wb") as file:
                 with istf.decrypt(tar_info) as decrypted:
                     with pytest.raises(
-                        ValueError, match="The inner tar is not gzip or tar"
+                        SecureTarReadError, match="The inner tar is not gzip or tar"
                     ):
                         while data := decrypted.read(bufsize):
                             file.write(data)
