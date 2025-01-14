@@ -7,7 +7,7 @@ import shutil
 import tarfile
 import time
 from dataclasses import dataclass
-from pathlib import Path, PurePath
+from pathlib import Path
 from unittest.mock import Mock, patch
 import pytest
 
@@ -47,10 +47,8 @@ def test_not_secure_path() -> None:
     assert [] == list(secure_path(test_list))
 
 
-def _test_file_filter() -> None:
-    """Test exclude filter."""
 def test_file_filter(tmp_path: Path) -> None:
-    """Test to create a tar file without encryption."""
+    """Test exclude filter."""
     file_filter = Mock(return_value=False)
     # Prepare test folder
     temp_orig = tmp_path.joinpath("orig")
