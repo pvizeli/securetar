@@ -43,8 +43,10 @@ MOD_WRITE = "w"
 class SecureTarError(Exception):
     """SecureTar error."""
 
+
 class SecureTarReadError(SecureTarError):
     """SecureTar read error."""
+
 
 class SecureTarFile:
     """Handle encrypted files for tarfile library."""
@@ -201,12 +203,12 @@ class SecureTarFile:
                 """Validate inner tar."""
                 if (
                     head[0 : len(GZIP_MAGIC_BYTES)] != GZIP_MAGIC_BYTES
-                    and head[
-                        TAR_MAGIC_OFFSET : TAR_MAGIC_OFFSET + len(TAR_MAGIC_BYTES)
-                    ]
+                    and head[TAR_MAGIC_OFFSET : TAR_MAGIC_OFFSET + len(TAR_MAGIC_BYTES)]
                     != TAR_MAGIC_BYTES
                 ):
-                    raise SecureTarReadError("The inner tar is not gzip or tar, wrong key?")
+                    raise SecureTarReadError(
+                        "The inner tar is not gzip or tar, wrong key?"
+                    )
 
             def read(self, size: int = 0) -> bytes:
                 """Read data."""
