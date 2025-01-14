@@ -32,6 +32,10 @@ PLAINTEXT_SIZE_HEADER = "_securetar.plaintext_size"
 VERSION_HEADER = "_securetar.version"
 SECURETAR_VERSION = "2.0"
 
+GZIP_MAGIC_BYTES = b"\x1f\x8b\x08"
+TAR_MAGIC_BYTES = b"ustar"
+TAR_MAGIC_OFFSET = 257
+
 MOD_READ = "r"
 MOD_WRITE = "w"
 
@@ -180,6 +184,7 @@ class SecureTarFile:
 
             def __init__(self, parent: SecureTarFile) -> None:
                 """Initialize."""
+                self._head: bytes | None = None
                 self._parent = parent
                 self._pos = 0
                 self._size = tarinfo.size - IV_SIZE
@@ -187,18 +192,41 @@ class SecureTarFile:
 
             def read(self, size: int = 0) -> bytes:
                 """Read data."""
+                if self._head is None:
+                    # Read and validate header
+                    self._head = self._parent.read(max(size, 512))
+                    if (
+                        self._head[0 : len(GZIP_MAGIC_BYTES)] != GZIP_MAGIC_BYTES
+                        and self._head[
+                            TAR_MAGIC_OFFSET : TAR_MAGIC_OFFSET + len(TAR_MAGIC_BYTES)
+                        ]
+                        != TAR_MAGIC_BYTES
+                    ):
+                        raise ValueError("The inner tar is not gzip or tar, wrong key?")
+
                 if self._tail:
                     # Finish reading tail
                     data = self._tail[:size]
                     self._tail = self._tail[size:]
                     return data
 
-                data = self._parent.read(size)
+                if self._head:
+                    # Read from head
+                    data = self._head[:size]
+                    self._head = self._head[size:]
+                    remaining = size - len(data)
+                    if remaining:
+                        data += self._parent.read(remaining)
+                else:
+                    data = self._parent.read(size)
+
                 self._pos += len(data)
                 if not data or self._size - self._pos > BLOCK_SIZE:
                     return data
 
-                # Last block, read tail and discard padding
+                # Last block: Append any remaining head, read tail and discard padding
+                if self._head:
+                    data += self._head
                 data += self._parent.read(self._size - self._pos)
                 padding_len = data[-1]
                 data = data[:-padding_len]
