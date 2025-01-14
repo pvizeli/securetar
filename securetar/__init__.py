@@ -389,21 +389,32 @@ def atomic_contents_add(
 ) -> None:
     """Append directories and/or files to the TarFile if file_filter returns False."""
 
-    if file_filter(origin_path):
+    if file_filter(PurePath(arcname)):
         return None
+    return _atomic_contents_add(tar_file, origin_path, file_filter, arcname)
+
+
+def _atomic_contents_add(
+    tar_file: tarfile.TarFile,
+    origin_path: Path,
+    file_filter: Callable[[PurePath], bool],
+    arcname: str,
+) -> None:
+    """Append directories and/or files to the TarFile if file_filter returns False."""
 
     # Add directory only (recursive=False) to ensure we also archive empty directories
     tar_file.add(origin_path.as_posix(), arcname=arcname, recursive=False)
 
     for directory_item in origin_path.iterdir():
-        if file_filter(directory_item):
+        item_arcpath = PurePath(arcname, directory_item.name)
+        if file_filter(PurePath(item_arcpath)):
             continue
 
-        arcpath = PurePath(arcname, directory_item.name).as_posix()
+        item_arcname = item_arcpath.as_posix()
         if directory_item.is_dir() and not directory_item.is_symlink():
-            atomic_contents_add(tar_file, directory_item, file_filter, arcpath)
+            _atomic_contents_add(tar_file, directory_item, file_filter, item_arcname)
             continue
 
-        tar_file.add(directory_item.as_posix(), arcname=arcpath, recursive=False)
+        tar_file.add(directory_item.as_posix(), arcname=item_arcname, recursive=False)
 
     return None

@@ -7,7 +7,7 @@ import shutil
 import tarfile
 import time
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePath
 from unittest.mock import Mock, patch
 import pytest
 
@@ -64,16 +64,16 @@ def test_file_filter(tmp_path: Path) -> None:
             file_filter=file_filter,
             arcname=".",
         )
-    paths = {call[1][0] for call in file_filter.mock_calls}
+    paths = [call[1][0] for call in file_filter.mock_calls]
     expected_paths = {
-        temp_orig,
-        temp_orig / "README.md",
-        temp_orig / "test_symlink",
-        temp_orig / "test1",
-        temp_orig / "test1",
-        temp_orig / "test1/script.sh",
+        PurePath("."),
+        PurePath("README.md"),
+        PurePath("test_symlink"),
+        PurePath("test1"),
+        PurePath("test1/script.sh"),
     }
-    assert paths == expected_paths
+    assert len(paths) == len(expected_paths)
+    assert set(paths) == expected_paths
 
 
 @pytest.mark.parametrize("bufsize", [10240, 4 * 2**20])
