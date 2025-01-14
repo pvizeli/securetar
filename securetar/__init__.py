@@ -182,7 +182,7 @@ class SecureTarFile:
                 """Initialize."""
                 self._parent = parent
                 self._pos = 0
-                self._size = tarinfo.size
+                self._size = tarinfo.size - IV_SIZE
                 self._tail = b""
 
             def read(self, size: int = 0) -> bytes:
