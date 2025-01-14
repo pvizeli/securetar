@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 import hashlib
 import logging
 import os
@@ -381,39 +381,27 @@ def secure_path(tar: tarfile.TarFile) -> Generator[tarfile.TarInfo, None, None]:
             yield member
 
 
-def _is_excluded_by_filter(path: PurePath, exclude_list: list[str]) -> bool:
-    """Filter to filter excludes."""
-
-    for exclude in exclude_list:
-        if not path.full_match(exclude):
-            continue
-        _LOGGER.debug("Ignoring %s because of %s", path, exclude)
-        return True
-
-    return False
-
-
 def atomic_contents_add(
     tar_file: tarfile.TarFile,
     origin_path: Path,
-    excludes: list[str],
+    file_filter: Callable[[PurePath], bool],
     arcname: str = ".",
 ) -> None:
-    """Append directories and/or files to the TarFile if excludes wont filter."""
+    """Append directories and/or files to the TarFile if file_filter returns False."""
 
-    if _is_excluded_by_filter(origin_path, excludes):
+    if file_filter(origin_path):
         return None
 
     # Add directory only (recursive=False) to ensure we also archive empty directories
     tar_file.add(origin_path.as_posix(), arcname=arcname, recursive=False)
 
     for directory_item in origin_path.iterdir():
-        if _is_excluded_by_filter(directory_item, excludes):
+        if file_filter(directory_item):
             continue
 
         arcpath = PurePath(arcname, directory_item.name).as_posix()
         if directory_item.is_dir() and not directory_item.is_symlink():
-            atomic_contents_add(tar_file, directory_item, excludes, arcpath)
+            atomic_contents_add(tar_file, directory_item, file_filter, arcpath)
             continue
 
         tar_file.add(directory_item.as_posix(), arcname=arcpath, recursive=False)

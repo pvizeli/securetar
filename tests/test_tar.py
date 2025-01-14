@@ -8,12 +8,11 @@ import tarfile
 import time
 from dataclasses import dataclass
 from pathlib import Path, PurePath
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 import pytest
 
 from securetar import (
     SecureTarFile,
-    _is_excluded_by_filter,
     _add_stream,
     atomic_contents_add,
     secure_path,
@@ -48,24 +47,35 @@ def test_not_secure_path() -> None:
     assert [] == list(secure_path(test_list))
 
 
-def test_is_excluded_by_filter() -> None:
+def _test_file_filter() -> None:
     """Test exclude filter."""
-    filter_list = ["not/match", "/dev/xy", "tts/**", "**/.DS_Store"]
-    test_list = [
-        (PurePath("test.txt"), False),
-        (PurePath("data/xy.blob"), False),
-        (PurePath("bla/blu/ble"), False),
-        (PurePath("data/../xy.blob"), False),
-        (PurePath("tts"), False),
-        (PurePath("tts/blah"), True),
-        (PurePath("tts/blah/bleh"), True),
-        (PurePath("data/tts"), False),
-        (PurePath(".DS_Store"), True),
-        (PurePath("data/.DS_Store"), True),
-    ]
+def test_file_filter(tmp_path: Path) -> None:
+    """Test to create a tar file without encryption."""
+    file_filter = Mock(return_value=False)
+    # Prepare test folder
+    temp_orig = tmp_path.joinpath("orig")
+    fixture_data = Path(__file__).parent.joinpath("fixtures/tar_data")
+    shutil.copytree(fixture_data, temp_orig, symlinks=True)
 
-    for path_object, expect_filtered in test_list:
-        assert _is_excluded_by_filter(path_object, filter_list) == expect_filtered
+    # Create Tarfile
+    temp_tar = tmp_path.joinpath("backup.tar")
+    with SecureTarFile(temp_tar, "w") as tar_file:
+        atomic_contents_add(
+            tar_file,
+            temp_orig,
+            file_filter=file_filter,
+            arcname=".",
+        )
+    paths = [call[1][0] for call in file_filter.mock_calls]
+    expected_paths = [
+        temp_orig,
+        temp_orig / "README.md",
+        temp_orig / "test_symlink",
+        temp_orig / "test1",
+        temp_orig / "test1",
+        temp_orig / "test1/script.sh",
+    ]
+    assert paths == expected_paths
 
 
 @pytest.mark.parametrize("bufsize", [10240, 4 * 2**20])
@@ -82,7 +92,7 @@ def test_create_pure_tar(tmp_path: Path, bufsize: int) -> None:
         atomic_contents_add(
             tar_file,
             temp_orig,
-            excludes=[],
+            file_filter=lambda _: False,
             arcname=".",
         )
 
@@ -126,7 +136,7 @@ def test_create_encrypted_tar(tmp_path: Path, bufsize: int) -> None:
         atomic_contents_add(
             tar_file,
             temp_orig,
-            excludes=[],
+            file_filter=lambda _: False,
             arcname=".",
         )
 
@@ -185,7 +195,7 @@ def test_gzipped_tar_inside_tar(tmp_path: Path) -> None:
                 atomic_contents_add(
                     inner_tar_file,
                     temp_orig,
-                    excludes=[],
+                    file_filter=lambda _: False,
                     arcname=".",
                 )
 
@@ -263,7 +273,7 @@ def test_gzipped_tar_inside_tar_failure(tmp_path: Path) -> None:
                 atomic_contents_add(
                     inner_tar_file,
                     temp_orig,
-                    excludes=[],
+                    file_filter=lambda _: False,
                     arcname=".",
                 )
                 raise ValueError("Test")
@@ -328,7 +338,7 @@ def test_encrypted_gzipped_tar_inside_tar(tmp_path: Path, bufsize: int) -> None:
                 atomic_contents_add(
                     inner_tar_file,
                     temp_orig,
-                    excludes=[],
+                    file_filter=lambda _: False,
                     arcname=".",
                 )
 
