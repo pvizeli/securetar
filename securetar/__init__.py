@@ -40,6 +40,12 @@ MOD_READ = "r"
 MOD_WRITE = "w"
 
 
+class SecureTarError(Exception):
+    """SecureTar error."""
+
+class SecureTarReadError(SecureTarError):
+    """SecureTar read error."""
+
 class SecureTarFile:
     """Handle encrypted files for tarfile library."""
 
@@ -202,7 +208,7 @@ class SecureTarFile:
                         ]
                         != TAR_MAGIC_BYTES
                     ):
-                        raise ValueError("The inner tar is not gzip or tar, wrong key?")
+                        raise SecureTarReadError("The inner tar is not gzip or tar, wrong key?")
 
                 if self._tail:
                     # Finish reading tail
