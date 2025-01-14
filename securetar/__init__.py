@@ -387,7 +387,12 @@ def atomic_contents_add(
     file_filter: Callable[[PurePath], bool],
     arcname: str = ".",
 ) -> None:
-    """Append directories and/or files to the TarFile if file_filter returns False."""
+    """Append directories and/or files to the TarFile if file_filter returns False.
+
+    :param file_filter: A filter function, should return False if the item should
+    be excluded from the archived. The function should take a single argument, a
+    pathlib.PurePath object representing the relative path of the item to be archived.
+    """
 
     if file_filter(PurePath(arcname)):
         return None
