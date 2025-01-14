@@ -196,19 +196,24 @@ class SecureTarFile:
                 self._size = tarinfo.size - IV_SIZE
                 self._tail = b""
 
+            @staticmethod
+            def _validate_inner_tar(head: bytes) -> None:
+                """Validate inner tar."""
+                if (
+                    head[0 : len(GZIP_MAGIC_BYTES)] != GZIP_MAGIC_BYTES
+                    and head[
+                        TAR_MAGIC_OFFSET : TAR_MAGIC_OFFSET + len(TAR_MAGIC_BYTES)
+                    ]
+                    != TAR_MAGIC_BYTES
+                ):
+                    raise SecureTarReadError("The inner tar is not gzip or tar, wrong key?")
+
             def read(self, size: int = 0) -> bytes:
                 """Read data."""
                 if self._head is None:
                     # Read and validate header
                     self._head = self._parent.read(max(size, 512))
-                    if (
-                        self._head[0 : len(GZIP_MAGIC_BYTES)] != GZIP_MAGIC_BYTES
-                        and self._head[
-                            TAR_MAGIC_OFFSET : TAR_MAGIC_OFFSET + len(TAR_MAGIC_BYTES)
-                        ]
-                        != TAR_MAGIC_BYTES
-                    ):
-                        raise SecureTarReadError("The inner tar is not gzip or tar, wrong key?")
+                    self._validate_inner_tar(self._head)
 
                 if self._tail:
                     # Finish reading tail
