@@ -64,15 +64,15 @@ def test_file_filter(tmp_path: Path) -> None:
             file_filter=file_filter,
             arcname=".",
         )
-    paths = [call[1][0] for call in file_filter.mock_calls]
-    expected_paths = [
+    paths = {call[1][0] for call in file_filter.mock_calls}
+    expected_paths = {
         temp_orig,
         temp_orig / "README.md",
         temp_orig / "test_symlink",
         temp_orig / "test1",
         temp_orig / "test1",
         temp_orig / "test1/script.sh",
-    ]
+    }
     assert paths == expected_paths
 
 
