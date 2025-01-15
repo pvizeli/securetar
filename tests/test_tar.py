@@ -14,6 +14,7 @@ import pytest
 from securetar import (
     SECURETAR_MAGIC,
     SecureTarFile,
+    SecureTarHeader,
     SecureTarReadError,
     _add_stream,
     atomic_contents_add,
@@ -596,9 +597,10 @@ def test_tar_stream(tmp_path: Path, format: int) -> None:
     main_tar = tmp_path.joinpath("backup.tar")
 
     with patch.object(tarfile, "DEFAULT_FORMAT", format):
-        with SecureTarFile(main_tar, "w", gzip=False) as tar_file:
+        ostf = SecureTarFile(main_tar, "w", gzip=False)
+        with ostf as tar_file:
             tar_info = tarfile.TarInfo(name="test.txt")
-            with _add_stream(tar_file, tar_info, bytearray()) as stream:
+            with _add_stream(tar_file, tar_info, ostf) as stream:
                 stream.write(b"test")
 
         # Restore
