@@ -387,6 +387,7 @@ def _add_stream(
 
         tar_info.size = size_of_inner_tar
         if padding:
+            # Update the size in the header
             fileobj.seek(
                 tell_before_adding_inner_file_header
                 + tar_info_header_len

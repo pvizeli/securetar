@@ -219,11 +219,12 @@ def test_tar_inside_tar(
 
     assert main_tar.exists()
 
-    # Iterate over the tar file
+    # Iterate over the tar file, and check there's no securetar header
     files = set()
     with SecureTarFile(main_tar, "r", gzip=False) as tar_file:
         for tar_info in tar_file:
-            assert "_securetar.plaintext_size" not in tar_info.pax_headers
+            inner_tar = tar_file.extractfile(tar_info)
+            assert inner_tar.read(len(SECURETAR_MAGIC)) != SECURETAR_MAGIC
             files.add(tar_info.name)
     assert files == {"backup.json", *inner_tar_files}
 
@@ -379,7 +380,7 @@ def test_encrypted_tar_inside_tar(
     with SecureTarFile(main_tar, "r", gzip=False, bufsize=bufsize) as tar_file:
         for tar_info in tar_file:
             inner_tar = tar_file.extractfile(tar_info)
-            assert inner_tar.read(16) == SECURETAR_MAGIC
+            assert inner_tar.read(len(SECURETAR_MAGIC)) == SECURETAR_MAGIC
             file_sizes[tar_info.name] = int.from_bytes(inner_tar.read(8), "big")
     assert set(file_sizes) == {*inner_tar_files}
 
@@ -488,12 +489,12 @@ def test_encrypted_gzipped_tar_inside_tar_legacy_format(
     fixture_path = Path(__file__).parent.joinpath("fixtures")
     main_tar = fixture_path.joinpath("./backup_encrypted_gzipped_legacy_format.tar")
 
-    # Iterate over the tar file
+    # Iterate over the tar file, and check there's no securetar header
     files: set[str] = set()
     with SecureTarFile(main_tar, "r", gzip=False, bufsize=bufsize) as tar_file:
         for tar_info in tar_file:
-            assert "_securetar.plaintext_size" not in tar_info.pax_headers
-            assert "_securetar.version" not in tar_info.pax_headers
+            inner_tar = tar_file.extractfile(tar_info)
+            assert inner_tar.read(len(SECURETAR_MAGIC)) != SECURETAR_MAGIC
             files.add(tar_info.name)
     assert files == {
         "core.tar.gz",
