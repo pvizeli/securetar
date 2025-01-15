@@ -14,7 +14,6 @@ import pytest
 from securetar import (
     SECURETAR_MAGIC,
     SecureTarFile,
-    SecureTarHeader,
     SecureTarReadError,
     _add_stream,
     atomic_contents_add,
