@@ -40,7 +40,11 @@ MOD_WRITE = "w"
 
 
 class SecureTarHeader:
-    """SecureTar header."""
+    """SecureTar header.
+
+    Reads and produces the SecureTar header. Also accepts the magic-less
+    format used in earlier releases of SecureTar.
+    """
 
     def __init__(self, cbc_rand: bytes, plaintext_size: int | None) -> None:
         """Initialize SecureTar header."""
