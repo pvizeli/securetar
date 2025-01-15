@@ -12,6 +12,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from securetar import (
+    SECURETAR_MAGIC,
     SecureTarFile,
     SecureTarReadError,
     _add_stream,
@@ -377,10 +378,9 @@ def test_encrypted_tar_inside_tar(
     file_sizes: dict[str, int] = {}
     with SecureTarFile(main_tar, "r", gzip=False, bufsize=bufsize) as tar_file:
         for tar_info in tar_file:
-            file_sizes[tar_info.name] = tar_info.pax_headers[
-                "_securetar.plaintext_size"
-            ]
-            assert tar_info.pax_headers["_securetar.version"] == "2.0"
+            inner_tar = tar_file.extractfile(tar_info)
+            assert inner_tar.read(16) == SECURETAR_MAGIC
+            file_sizes[tar_info.name] = int.from_bytes(inner_tar.read(8), "big")
     assert set(file_sizes) == {*inner_tar_files}
 
     # Decrypt the inner tar with wrong key
@@ -423,7 +423,7 @@ def test_encrypted_tar_inside_tar(
                         file.write(data)
 
             # Check the indicated size is correct
-            assert inner_tar_path.stat().st_size == int(file_sizes[tar_info.name])
+            assert inner_tar_path.stat().st_size == file_sizes[tar_info.name]
 
             # Check decrypted file is valid gzip, this fails if the padding is not
             # discarded correctly

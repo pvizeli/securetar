@@ -28,9 +28,8 @@ BLOCK_SIZE_BITS = 128
 IV_SIZE = BLOCK_SIZE
 DEFAULT_BUFSIZE = 10240
 
-PLAINTEXT_SIZE_HEADER = "_securetar.plaintext_size"
-VERSION_HEADER = "_securetar.version"
-SECURETAR_VERSION = "2.0"
+SECURETAR_MAGIC = b"SecureTar\x02\x00\x00\x00\x00\x00\x00"
+SECURETAR_HEADER_SIZE = len(SECURETAR_MAGIC) + 16
 
 GZIP_MAGIC_BYTES = b"\x1f\x8b\x08"
 TAR_MAGIC_BYTES = b"ustar"
@@ -90,6 +89,8 @@ class SecureTarFile:
         self._padder: padding.PaddingContext | None = None
         self._padding = bytearray()
 
+        self.plaintext_size: int | None = None
+
     def create_inner_tar(
         self, name: str, key: bytes | None = None, gzip: bool = True
     ) -> "_InnerSecureTarFile":
@@ -147,8 +148,16 @@ class SecureTarFile:
     def _setup_cipher(self) -> None:
         # Extract IV for CBC
         if self._mode == MOD_READ:
-            cbc_rand = self._file.read(IV_SIZE)
+            header = self._file.read(len(SECURETAR_MAGIC))
+            if header != SECURETAR_MAGIC:
+                cbc_rand = header
+            else:
+                self.plaintext_size = int.from_bytes(self._file.read(8), "big")
+                self._file.read(8)  # Skip reserved bytes
+                cbc_rand = self._file.read(IV_SIZE)
         else:
+            self._file.write(SECURETAR_MAGIC)
+            self._file.write(bytes(16))
             cbc_rand = os.urandom(IV_SIZE)
             self._file.write(cbc_rand)
 
@@ -197,6 +206,8 @@ class SecureTarFile:
                 self._pos = 0
                 self._size = tarinfo.size - IV_SIZE
                 self._tail: bytes | None = None
+                if parent.plaintext_size is not None:
+                    self._size -= SECURETAR_HEADER_SIZE
 
             @staticmethod
             def _validate_inner_tar(head: bytes) -> None:
@@ -376,13 +387,18 @@ def _add_stream(
 
         tar_info.size = size_of_inner_tar
         if padding:
-            tar_info.pax_headers = {
-                **tar_info.pax_headers,
-                # The plaintext size is the size of the written ciphertext
-                # minus the size of the padding and the IV
-                PLAINTEXT_SIZE_HEADER: str(size_of_inner_tar - len(padding) - IV_SIZE),
-                VERSION_HEADER: SECURETAR_VERSION,
-            }
+            fileobj.seek(
+                tell_before_adding_inner_file_header
+                + tar_info_header_len
+                + len(SECURETAR_MAGIC)
+            )
+            tar.fileobj.write(
+                int.to_bytes(
+                    size_of_inner_tar - len(padding) - IV_SIZE - SECURETAR_HEADER_SIZE,
+                    8,
+                    "big",
+                )
+            )
         # Now that we know the size of the inner tar, we seek back
         # to where we started and re-add the member with the correct size
         fileobj.seek(tell_before_adding_inner_file_header)
