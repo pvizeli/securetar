@@ -12,6 +12,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from securetar import (
+    SECURETAR_MAGIC,
     SecureTarFile,
     SecureTarReadError,
     _add_stream,
@@ -218,11 +219,12 @@ def test_tar_inside_tar(
 
     assert main_tar.exists()
 
-    # Iterate over the tar file
+    # Iterate over the tar file, and check there's no securetar header
     files = set()
     with SecureTarFile(main_tar, "r", gzip=False) as tar_file:
         for tar_info in tar_file:
-            assert "_securetar.plaintext_size" not in tar_info.pax_headers
+            inner_tar = tar_file.extractfile(tar_info)
+            assert inner_tar.read(len(SECURETAR_MAGIC)) != SECURETAR_MAGIC
             files.add(tar_info.name)
     assert files == {"backup.json", *inner_tar_files}
 
@@ -377,10 +379,9 @@ def test_encrypted_tar_inside_tar(
     file_sizes: dict[str, int] = {}
     with SecureTarFile(main_tar, "r", gzip=False, bufsize=bufsize) as tar_file:
         for tar_info in tar_file:
-            file_sizes[tar_info.name] = tar_info.pax_headers[
-                "_securetar.plaintext_size"
-            ]
-            assert tar_info.pax_headers["_securetar.version"] == "2.0"
+            inner_tar = tar_file.extractfile(tar_info)
+            assert inner_tar.read(len(SECURETAR_MAGIC)) == SECURETAR_MAGIC
+            file_sizes[tar_info.name] = int.from_bytes(inner_tar.read(8), "big")
     assert set(file_sizes) == {*inner_tar_files}
 
     # Decrypt the inner tar with wrong key
@@ -423,7 +424,7 @@ def test_encrypted_tar_inside_tar(
                         file.write(data)
 
             # Check the indicated size is correct
-            assert inner_tar_path.stat().st_size == int(file_sizes[tar_info.name])
+            assert inner_tar_path.stat().st_size == file_sizes[tar_info.name]
 
             # Check decrypted file is valid gzip, this fails if the padding is not
             # discarded correctly
@@ -488,12 +489,12 @@ def test_encrypted_gzipped_tar_inside_tar_legacy_format(
     fixture_path = Path(__file__).parent.joinpath("fixtures")
     main_tar = fixture_path.joinpath("./backup_encrypted_gzipped_legacy_format.tar")
 
-    # Iterate over the tar file
+    # Iterate over the tar file, and check there's no securetar header
     files: set[str] = set()
     with SecureTarFile(main_tar, "r", gzip=False, bufsize=bufsize) as tar_file:
         for tar_info in tar_file:
-            assert "_securetar.plaintext_size" not in tar_info.pax_headers
-            assert "_securetar.version" not in tar_info.pax_headers
+            inner_tar = tar_file.extractfile(tar_info)
+            assert inner_tar.read(len(SECURETAR_MAGIC)) != SECURETAR_MAGIC
             files.add(tar_info.name)
     assert files == {
         "core.tar.gz",
@@ -595,9 +596,10 @@ def test_tar_stream(tmp_path: Path, format: int) -> None:
     main_tar = tmp_path.joinpath("backup.tar")
 
     with patch.object(tarfile, "DEFAULT_FORMAT", format):
-        with SecureTarFile(main_tar, "w", gzip=False) as tar_file:
+        ostf = SecureTarFile(main_tar, "w", gzip=False)
+        with ostf as tar_file:
             tar_info = tarfile.TarInfo(name="test.txt")
-            with _add_stream(tar_file, tar_info, bytearray()) as stream:
+            with _add_stream(tar_file, tar_info, ostf) as stream:
                 stream.write(b"test")
 
         # Restore

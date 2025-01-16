@@ -28,9 +28,8 @@ BLOCK_SIZE_BITS = 128
 IV_SIZE = BLOCK_SIZE
 DEFAULT_BUFSIZE = 10240
 
-PLAINTEXT_SIZE_HEADER = "_securetar.plaintext_size"
-VERSION_HEADER = "_securetar.version"
-SECURETAR_VERSION = "2.0"
+SECURETAR_MAGIC = b"SecureTar\x02\x00\x00\x00\x00\x00\x00"
+SECURETAR_HEADER_SIZE = len(SECURETAR_MAGIC) + 16
 
 GZIP_MAGIC_BYTES = b"\x1f\x8b\x08"
 TAR_MAGIC_BYTES = b"ustar"
@@ -38,6 +37,44 @@ TAR_MAGIC_OFFSET = 257
 
 MOD_READ = "r"
 MOD_WRITE = "w"
+
+
+class SecureTarHeader:
+    """SecureTar header.
+
+    Reads and produces the SecureTar header. Also accepts the magic-less
+    format used in earlier releases of SecureTar.
+    """
+
+    def __init__(self, cbc_rand: bytes, plaintext_size: int | None) -> None:
+        """Initialize SecureTar header."""
+        self.cbc_rand = cbc_rand
+        self.plaintext_size = plaintext_size
+
+    @classmethod
+    def from_bytes(cls, f: IO[bytes]) -> SecureTarHeader:
+        """Return header bytes."""
+        header = f.read(len(SECURETAR_MAGIC))
+        plaintext_size: int | None = None
+        if header != SECURETAR_MAGIC:
+            cbc_rand = header
+        else:
+            plaintext_size = int.from_bytes(f.read(8), "big")
+            f.read(8)  # Skip reserved bytes
+            cbc_rand = f.read(IV_SIZE)
+
+        return cls(cbc_rand, plaintext_size)
+
+    def to_bytes(self) -> bytes:
+        """Return header bytes."""
+        if self.plaintext_size is None:
+            raise ValueError("Plaintext size is required")
+        return (
+            SECURETAR_MAGIC
+            + self.plaintext_size.to_bytes(8, "big")
+            + bytes(8)
+            + self.cbc_rand
+        )
 
 
 class SecureTarError(Exception):
@@ -88,7 +125,9 @@ class SecureTarFile:
         self._decrypt: CipherContext | None = None
         self._encrypt: CipherContext | None = None
         self._padder: padding.PaddingContext | None = None
-        self._padding = bytearray()
+        self.padding_length = 0
+
+        self.securetar_header: SecureTarHeader | None = None
 
     def create_inner_tar(
         self, name: str, key: bytes | None = None, gzip: bool = True
@@ -147,10 +186,12 @@ class SecureTarFile:
     def _setup_cipher(self) -> None:
         # Extract IV for CBC
         if self._mode == MOD_READ:
-            cbc_rand = self._file.read(IV_SIZE)
+            self.securetar_header = SecureTarHeader.from_bytes(self._file)
+            cbc_rand = self.securetar_header.cbc_rand
         else:
             cbc_rand = os.urandom(IV_SIZE)
-            self._file.write(cbc_rand)
+            self.securetar_header = SecureTarHeader(cbc_rand, 0)
+            self._file.write(self.securetar_header.to_bytes())
 
         # Create Cipher
         self._aes = Cipher(
@@ -174,8 +215,9 @@ class SecureTarFile:
         """Close file."""
         if self._file:
             if not self._mode.startswith("r"):
-                self._padding += self._padder.finalize()
-                self._file.write(self._encrypt.update(self._padding))
+                padding = self._padder.finalize()
+                self._file.write(self._encrypt.update(padding))
+                self.padding_length = len(padding)
             if not self._fileobj:
                 self._file.close()
             self._file = None
@@ -197,6 +239,8 @@ class SecureTarFile:
                 self._pos = 0
                 self._size = tarinfo.size - IV_SIZE
                 self._tail: bytes | None = None
+                if parent.securetar_header.plaintext_size is not None:
+                    self._size -= SECURETAR_HEADER_SIZE
 
             @staticmethod
             def _validate_inner_tar(head: bytes) -> None:
@@ -314,7 +358,7 @@ class _InnerSecureTarFile(SecureTarFile):
             tar_info.mtime = time.time()
         else:
             tar_info.mtime = int(time.time())
-        self.stream = _add_stream(self.outer_tar, tar_info, self._padding)
+        self.stream = _add_stream(self.outer_tar, tar_info, self)
         self.stream.__enter__()
         return super().__enter__()
 
@@ -326,7 +370,7 @@ class _InnerSecureTarFile(SecureTarFile):
 
 @contextmanager
 def _add_stream(
-    tar: tarfile.TarFile, tar_info: tarfile.TarInfo, padding: bytearray
+    tar: tarfile.TarFile, tar_info: tarfile.TarInfo, inner_tar: _InnerSecureTarFile
 ) -> Generator[BinaryIO, None, None]:
     """Add a stream to the tarfile.
 
@@ -375,14 +419,16 @@ def _add_stream(
         tar.offset += size_of_inner_tar + padding_size
 
         tar_info.size = size_of_inner_tar
-        if padding:
-            tar_info.pax_headers = {
-                **tar_info.pax_headers,
-                # The plaintext size is the size of the written ciphertext
-                # minus the size of the padding and the IV
-                PLAINTEXT_SIZE_HEADER: str(size_of_inner_tar - len(padding) - IV_SIZE),
-                VERSION_HEADER: SECURETAR_VERSION,
-            }
+        if inner_tar.padding_length:
+            # Update the size in the header
+            inner_tar.securetar_header.plaintext_size = (
+                size_of_inner_tar
+                - inner_tar.padding_length
+                - IV_SIZE
+                - SECURETAR_HEADER_SIZE
+            )
+            fileobj.seek(tell_before_adding_inner_file_header + tar_info_header_len)
+            tar.fileobj.write(inner_tar.securetar_header.to_bytes())
         # Now that we know the size of the inner tar, we seek back
         # to where we started and re-add the member with the correct size
         fileobj.seek(tell_before_adding_inner_file_header)
