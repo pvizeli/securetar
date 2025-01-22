@@ -316,7 +316,6 @@ class SecureTarFile:
             def write(self, data: bytes) -> None:
                 """Write data."""
                 self._parent.write(data)
-                return None
 
         try:
             self._open_file()
