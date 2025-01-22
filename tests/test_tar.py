@@ -177,6 +177,7 @@ def test_create_encrypted_tar(tmp_path: Path, bufsize: int) -> None:
     assert temp_new.joinpath("README.md").is_file()
 
 
+@pytest.mark.parametrize("bufsize", [33, 333, 10240, 4 * 2**20])
 @pytest.mark.parametrize(
     ("enable_gzip", "inner_tar_files"),
     [
@@ -185,7 +186,7 @@ def test_create_encrypted_tar(tmp_path: Path, bufsize: int) -> None:
     ],
 )
 def test_tar_inside_tar(
-    tmp_path: Path, enable_gzip: bool, inner_tar_files: tuple[str, ...]
+    tmp_path: Path, bufsize: int, enable_gzip: bool, inner_tar_files: tuple[str, ...]
 ) -> None:
     # Prepare test folder
     temp_orig = tmp_path.joinpath("orig")
@@ -227,6 +228,74 @@ def test_tar_inside_tar(
             assert inner_tar.read(len(SECURETAR_MAGIC)) != SECURETAR_MAGIC
             files.add(tar_info.name)
     assert files == {"backup.json", *inner_tar_files}
+
+    # Encrypt the inner tar files
+    key = os.urandom(16)
+    temp_encrypted = tmp_path.joinpath("encrypted")
+    os.makedirs(temp_encrypted, exist_ok=True)
+    with SecureTarFile(main_tar, "r", gzip=False, bufsize=bufsize) as tar_file:
+        for inner_tar_file in inner_tar_files:
+            tar_info = tar_file.getmember(inner_tar_file)
+            inner_tar_path = temp_encrypted.joinpath(tar_info.name)
+            with open(inner_tar_path, "wb") as file:
+                istf = SecureTarFile(
+                    None,
+                    gzip=False,  # We encrypt the compressed tar
+                    key=key,
+                    mode="w",
+                    fileobj=file,
+                )
+                decrypted = tar_file.extractfile(tar_info)
+                with istf.encrypt(tar_info) as encrypted:
+                    while data := decrypted.read(bufsize):
+                        encrypted.write(data)
+
+            # Check the indicated size is correct
+            assert (
+                inner_tar_path.stat().st_size
+                == tar_info.size + 16 - tar_info.size % 16 + 16 + 32
+            )
+
+    # Check the encrypted files can be opened
+    temp_decrypted = tmp_path.joinpath("decrypted")
+    os.makedirs(temp_decrypted, exist_ok=True)
+    for inner_tar_file in inner_tar_files:
+        encrypted_inner_tar_path = temp_encrypted.joinpath(inner_tar_file)
+        with open(encrypted_inner_tar_path, "rb") as encrypted_inner_tar:
+            tar_info = tarfile.TarInfo(inner_tar_file)
+            tar_info.size = encrypted_inner_tar_path.stat().st_size
+        with open(encrypted_inner_tar_path, "rb") as encrypted_inner_tar:
+            istf = SecureTarFile(
+                None,
+                gzip=False,  # We decrypt the compressed tar
+                key=key,
+                mode="r",
+                fileobj=encrypted_inner_tar,
+            )
+            decrypted_inner_tar_path = temp_decrypted.joinpath(inner_tar_file)
+            with open(decrypted_inner_tar_path, "wb") as file:
+                with istf.decrypt(tar_info) as decrypted:
+                    while data := decrypted.read(bufsize):
+                        file.write(data)
+
+            # Check decrypted file is valid gzip, this fails if the padding is not
+            # discarded correctly
+            if enable_gzip:
+                assert decrypted_inner_tar_path.stat().st_size > 0
+                gzip.decompress(decrypted_inner_tar_path.read_bytes())
+
+            # Check the tar file can be opened and iterate over it
+            files = set()
+            with tarfile.open(decrypted_inner_tar_path, "r") as itf:
+                for tar_info in itf:
+                    files.add(tar_info.name)
+            assert files == {
+                ".",
+                "README.md",
+                "test1",
+                "test1/script.sh",
+                "test_symlink",
+            }
 
     # Restore
     temp_new = tmp_path.joinpath("new")

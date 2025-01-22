@@ -183,14 +183,14 @@ class SecureTarFile:
             fd = os.open(self._name, file_mode, 0o666)
             self._file = os.fdopen(fd, "rb" if read_mode else "wb")
 
-    def _setup_cipher(self) -> None:
+    def _setup_cipher(self, plaintext_size: int = 0) -> None:
         # Extract IV for CBC
         if self._mode == MOD_READ:
             self.securetar_header = SecureTarHeader.from_bytes(self._file)
             cbc_rand = self.securetar_header.cbc_rand
         else:
             cbc_rand = os.urandom(IV_SIZE)
-            self.securetar_header = SecureTarHeader(cbc_rand, 0)
+            self.securetar_header = SecureTarHeader(cbc_rand, plaintext_size)
             self._file.write(self.securetar_header.to_bytes())
 
         # Create Cipher
@@ -294,6 +294,34 @@ class SecureTarFile:
             self._open_file()
             self._setup_cipher()
             yield DecryptInnerTar(self)
+        finally:
+            self._close_file()
+
+    @contextmanager
+    def encrypt(self, tarinfo: tarfile.TarInfo) -> Generator[BinaryIO, None, None]:
+        """Encrypt inner tar.
+
+        This is a helper to encrypt data and add padding.
+        """
+
+        class EncryptInnerTar:
+            """Encrypt inner tar file."""
+
+            def __init__(self, parent: SecureTarFile) -> None:
+                """Initialize."""
+                self._parent = parent
+                self._size = tarinfo.size + BLOCK_SIZE - tarinfo.size % BLOCK_SIZE
+                self._size += IV_SIZE + SECURETAR_HEADER_SIZE
+
+            def write(self, data: bytes) -> None:
+                """Write data."""
+                self._parent.write(data)
+                return None
+
+        try:
+            self._open_file()
+            self._setup_cipher(tarinfo.size)
+            yield EncryptInnerTar(self)
         finally:
             self._close_file()
 
