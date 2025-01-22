@@ -177,7 +177,6 @@ def test_create_encrypted_tar(tmp_path: Path, bufsize: int) -> None:
     assert temp_new.joinpath("README.md").is_file()
 
 
-@pytest.mark.parametrize("bufsize", [33, 333, 10240, 4 * 2**20])
 @pytest.mark.parametrize(
     ("nonce", "expect_same_content"),
     [(None, False), (os.urandom(16), True)],
@@ -229,8 +228,103 @@ def test_create_encrypted_tar_fixed_nonce(
     ],
 )
 def test_tar_inside_tar(
+    tmp_path: Path, enable_gzip: bool, inner_tar_files: tuple[str, ...]
+) -> None:
+    # Prepare test folder
+    temp_orig = tmp_path.joinpath("orig")
+    fixture_data = Path(__file__).parent.joinpath("fixtures/tar_data")
+    shutil.copytree(fixture_data, temp_orig, symlinks=True)
+
+    # Create Tarfile
+    main_tar = tmp_path.joinpath("backup.tar")
+    outer_secure_tar_file = SecureTarFile(main_tar, "w", gzip=False)
+    with outer_secure_tar_file as outer_tar_file:
+        for inner_tar_file in inner_tar_files:
+            with outer_secure_tar_file.create_inner_tar(
+                inner_tar_file, gzip=enable_gzip
+            ) as inner_tar_file:
+                atomic_contents_add(
+                    inner_tar_file,
+                    temp_orig,
+                    file_filter=lambda _: False,
+                    arcname=".",
+                )
+
+        assert len(outer_tar_file.getmembers()) == 3
+
+        raw_bytes = b'{"test": "test"}'
+        fileobj = io.BytesIO(raw_bytes)
+        tar_info = tarfile.TarInfo(name="backup.json")
+        tar_info.size = len(raw_bytes)
+        tar_info.mtime = time.time()
+        outer_tar_file.addfile(tar_info, fileobj=fileobj)
+        assert len(outer_tar_file.getmembers()) == 4
+
+    assert main_tar.exists()
+
+    # Iterate over the tar file, and check there's no securetar header
+    files = set()
+    with SecureTarFile(main_tar, "r", gzip=False) as tar_file:
+        for tar_info in tar_file:
+            inner_tar = tar_file.extractfile(tar_info)
+            assert inner_tar.read(len(SECURETAR_MAGIC)) != SECURETAR_MAGIC
+            files.add(tar_info.name)
+    assert files == {"backup.json", *inner_tar_files}
+
+    # Restore
+    temp_new = tmp_path.joinpath("new")
+    with SecureTarFile(main_tar, "r", gzip=False) as tar_file:
+        tar_file.extractall(path=temp_new)
+
+    assert temp_new.is_dir()
+    core_tar = temp_new.joinpath(inner_tar_files[0])
+    assert core_tar.is_file()
+    if enable_gzip:
+        compressed = core_tar.read_bytes()
+        uncompressed = gzip.decompress(core_tar.read_bytes())
+        assert len(uncompressed) > len(compressed)
+
+    assert temp_new.joinpath(inner_tar_files[1]).is_file()
+    assert temp_new.joinpath(inner_tar_files[2]).is_file()
+    backup_json = temp_new.joinpath("backup.json")
+    assert backup_json.is_file()
+    assert backup_json.read_bytes() == raw_bytes
+
+    # Extract inner tars
+    for inner_tar_file in inner_tar_files:
+        temp_inner_new = tmp_path.joinpath(f"{inner_tar_file}_inner_new")
+
+        with SecureTarFile(
+            temp_new.joinpath(inner_tar_file), "r", gzip=enable_gzip
+        ) as tar_file:
+            tar_file.extractall(path=temp_inner_new, members=tar_file)
+
+        assert temp_inner_new.is_dir()
+        assert temp_inner_new.joinpath("test_symlink").is_symlink()
+        assert temp_inner_new.joinpath("test1").is_dir()
+        assert temp_inner_new.joinpath("test1/script.sh").is_file()
+
+        # 775 is correct for local, but in GitHub action it's 755, both is fine
+        assert oct(temp_inner_new.joinpath("test1/script.sh").stat().st_mode)[-3:] in [
+            "755",
+            "775",
+        ]
+        assert temp_inner_new.joinpath("README.md").is_file()
+
+
+@pytest.mark.parametrize("bufsize", [33, 333, 10240, 4 * 2**20])
+@pytest.mark.parametrize(
+    ("enable_gzip", "inner_tar_files"),
+    [
+        (True, ("core.tar.gz", "core2.tar.gz", "core3.tar.gz")),
+        (False, ("core.tar", "core2.tar", "core3.tar")),
+    ],
+)
+def test_tar_inside_tar_encrypt(
     tmp_path: Path, bufsize: int, enable_gzip: bool, inner_tar_files: tuple[str, ...]
 ) -> None:
+    """Test we can make encrypted versions of plaintext tars."""
+
     # Prepare test folder
     temp_orig = tmp_path.joinpath("orig")
     fixture_data = Path(__file__).parent.joinpath("fixtures/tar_data")
@@ -279,19 +373,19 @@ def test_tar_inside_tar(
     with SecureTarFile(main_tar, "r", gzip=False, bufsize=bufsize) as tar_file:
         for inner_tar_file in inner_tar_files:
             tar_info = tar_file.getmember(inner_tar_file)
+
+            istf = SecureTarFile(
+                None,
+                gzip=False,  # We encrypt the compressed tar
+                key=key,
+                mode="r",
+                fileobj=tar_file.extractfile(tar_info),
+            )
             inner_tar_path = temp_encrypted.joinpath(tar_info.name)
             with open(inner_tar_path, "wb") as file:
-                istf = SecureTarFile(
-                    None,
-                    gzip=False,  # We encrypt the compressed tar
-                    key=key,
-                    mode="w",
-                    fileobj=file,
-                )
-                decrypted = tar_file.extractfile(tar_info)
                 with istf.encrypt(tar_info) as encrypted:
-                    while data := decrypted.read(bufsize):
-                        encrypted.write(data)
+                    while data := encrypted.read(bufsize):
+                        file.write(data)
 
             # Check the indicated size is correct
             assert (
@@ -322,7 +416,7 @@ def test_tar_inside_tar(
                         file.write(data)
 
             # Check decrypted file is valid gzip, this fails if the padding is not
-            # discarded correctly
+            # handled correctly
             if enable_gzip:
                 assert decrypted_inner_tar_path.stat().st_size > 0
                 gzip.decompress(decrypted_inner_tar_path.read_bytes())
@@ -339,46 +433,6 @@ def test_tar_inside_tar(
                 "test1/script.sh",
                 "test_symlink",
             }
-
-    # Restore
-    temp_new = tmp_path.joinpath("new")
-    with SecureTarFile(main_tar, "r", gzip=False) as tar_file:
-        tar_file.extractall(path=temp_new)
-
-    assert temp_new.is_dir()
-    core_tar = temp_new.joinpath(inner_tar_files[0])
-    assert core_tar.is_file()
-    if enable_gzip:
-        compressed = core_tar.read_bytes()
-        uncompressed = gzip.decompress(core_tar.read_bytes())
-        assert len(uncompressed) > len(compressed)
-
-    assert temp_new.joinpath(inner_tar_files[1]).is_file()
-    assert temp_new.joinpath(inner_tar_files[2]).is_file()
-    backup_json = temp_new.joinpath("backup.json")
-    assert backup_json.is_file()
-    assert backup_json.read_bytes() == raw_bytes
-
-    # Extract inner tars
-    for inner_tar_file in inner_tar_files:
-        temp_inner_new = tmp_path.joinpath(f"{inner_tar_file}_inner_new")
-
-        with SecureTarFile(
-            temp_new.joinpath(inner_tar_file), "r", gzip=enable_gzip
-        ) as tar_file:
-            tar_file.extractall(path=temp_inner_new, members=tar_file)
-
-        assert temp_inner_new.is_dir()
-        assert temp_inner_new.joinpath("test_symlink").is_symlink()
-        assert temp_inner_new.joinpath("test1").is_dir()
-        assert temp_inner_new.joinpath("test1/script.sh").is_file()
-
-        # 775 is correct for local, but in GitHub action it's 755, both is fine
-        assert oct(temp_inner_new.joinpath("test1/script.sh").stat().st_mode)[-3:] in [
-            "755",
-            "775",
-        ]
-        assert temp_inner_new.joinpath("README.md").is_file()
 
 
 def test_gzipped_tar_inside_tar_failure(tmp_path: Path) -> None:

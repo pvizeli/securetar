@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Generator
+import enum
 import hashlib
 import logging
 import os
@@ -37,6 +38,13 @@ TAR_MAGIC_OFFSET = 257
 
 MOD_READ = "r"
 MOD_WRITE = "w"
+
+
+class CipherMode(enum.Enum):
+    """Cipher mode."""
+
+    ENCRYPT = 1
+    DECRYPT = 2
 
 
 class SecureTarHeader:
@@ -124,8 +132,7 @@ class SecureTarFile:
         self._key: bytes | None = key
 
         # Function helper
-        self._decrypt: CipherContext | None = None
-        self._encrypt: CipherContext | None = None
+        self._cipher: CipherContext | None = None
         self._padder: padding.PaddingContext | None = None
         self.padding_length = 0
 
@@ -159,7 +166,15 @@ class SecureTarFile:
 
         # Encrypted/Decrypted Tarfile
         self._open_file()
-        self._setup_cipher()
+        if self._mode == MOD_READ:
+            self.securetar_header = SecureTarHeader.from_bytes(self._file)
+            cipher_mode = CipherMode.DECRYPT
+        else:
+            cbc_rand = self._nonce if self._nonce is not None else os.urandom(IV_SIZE)
+            self.securetar_header = SecureTarHeader(cbc_rand, 0)
+            self._file.write(self.securetar_header.to_bytes())
+            cipher_mode = CipherMode.ENCRYPT
+        self._setup_cipher(cipher_mode)
 
         self._tar = tarfile.open(
             fileobj=self,
@@ -185,15 +200,9 @@ class SecureTarFile:
             fd = os.open(self._name, file_mode, 0o666)
             self._file = os.fdopen(fd, "rb" if read_mode else "wb")
 
-    def _setup_cipher(self, plaintext_size: int = 0) -> None:
+    def _setup_cipher(self, cipher_mode: CipherMode) -> None:
         # Extract IV for CBC
-        if self._mode == MOD_READ:
-            self.securetar_header = SecureTarHeader.from_bytes(self._file)
-            cbc_rand = self.securetar_header.cbc_rand
-        else:
-            cbc_rand = self._nonce if self._nonce is not None else os.urandom(IV_SIZE)
-            self.securetar_header = SecureTarHeader(cbc_rand, plaintext_size)
-            self._file.write(self.securetar_header.to_bytes())
+        cbc_rand = self.securetar_header.cbc_rand
 
         # Create Cipher
         self._aes = Cipher(
@@ -202,8 +211,10 @@ class SecureTarFile:
             backend=default_backend(),
         )
 
-        self._decrypt = self._aes.decryptor()
-        self._encrypt = self._aes.encryptor()
+        if cipher_mode == CipherMode.DECRYPT:
+            self._cipher = self._aes.decryptor()
+        else:
+            self._cipher = self._aes.encryptor()
         self._padder = padding.PKCS7(BLOCK_SIZE_BITS).padder()
 
     def __exit__(self, exc_type, exc_value, traceback) -> None:
@@ -218,11 +229,56 @@ class SecureTarFile:
         if self._file:
             if not self._mode.startswith("r"):
                 padding = self._padder.finalize()
-                self._file.write(self._encrypt.update(padding))
+                self._file.write(self._cipher.update(padding))
                 self.padding_length = len(padding)
             if not self._fileobj:
                 self._file.close()
             self._file = None
+
+    class DecryptEncryptInnerTar:
+        """Base class to decrypt or encrypt inner tar file."""
+
+        def __init__(self, parent: SecureTarFile, size: int) -> None:
+            """Initialize."""
+            self._head: bytes | None = None
+            self._parent = parent
+            self._pos = 0
+            self._size = size
+            self._tail: bytes | None = None
+
+        def read(self, size: int = 0) -> bytes:
+            """Read data."""
+            if self._tail is not None:
+                # Finish reading tail
+                data = self._tail[:size]
+                self._tail = self._tail[size:]
+                return data
+
+            if self._head:
+                # Read from head
+                data = self._head[:size]
+                self._head = self._head[size:]
+                remaining = size - len(data)
+                if remaining:
+                    data += self._parent.read(remaining)
+            else:
+                data = self._parent.read(size)
+
+            self._pos += len(data)
+            if not data or self._size - self._pos > BLOCK_SIZE:
+                return data
+
+            # Last block: Append any remaining head, read tail and handle padding
+            if self._head:
+                data += self._head
+            data += self._parent.read(max(self._size - self._pos, 0))
+            data = self._process_padding(data)
+            self._tail = data[size:]
+            return data[:size]
+
+        def _process_padding(self, data: bytes) -> bytes:
+            """Process padding."""
+            raise NotImplementedError
 
     @contextmanager
     def decrypt(self, tarinfo: tarfile.TarInfo) -> Generator[BinaryIO, None, None]:
@@ -231,18 +287,15 @@ class SecureTarFile:
         This is a helper to decrypt data and discard the padding.
         """
 
-        class DecryptInnerTar:
+        class DecryptInnerTar(SecureTarFile.DecryptEncryptInnerTar):
             """Decrypt inner tar file."""
 
             def __init__(self, parent: SecureTarFile) -> None:
                 """Initialize."""
-                self._head: bytes | None = None
-                self._parent = parent
-                self._pos = 0
-                self._size = tarinfo.size - IV_SIZE
-                self._tail: bytes | None = None
+                size = tarinfo.size - IV_SIZE
                 if parent.securetar_header.plaintext_size is not None:
-                    self._size -= SECURETAR_HEADER_SIZE
+                    size -= SECURETAR_HEADER_SIZE
+                super().__init__(parent, size)
 
             @staticmethod
             def _validate_inner_tar(head: bytes) -> None:
@@ -263,38 +316,17 @@ class SecureTarFile:
                     self._head = self._parent.read(max(size, 512))
                     self._validate_inner_tar(self._head)
 
-                if self._tail is not None:
-                    # Finish reading tail
-                    data = self._tail[:size]
-                    self._tail = self._tail[size:]
-                    return data
+                return super().read(size)
 
-                if self._head:
-                    # Read from head
-                    data = self._head[:size]
-                    self._head = self._head[size:]
-                    remaining = size - len(data)
-                    if remaining:
-                        data += self._parent.read(remaining)
-                else:
-                    data = self._parent.read(size)
-
-                self._pos += len(data)
-                if not data or self._size - self._pos > BLOCK_SIZE:
-                    return data
-
-                # Last block: Append any remaining head, read tail and discard padding
-                if self._head:
-                    data += self._head
-                data += self._parent.read(self._size - self._pos)
+            def _process_padding(self, data: bytes) -> bytes:
+                """Process padding."""
                 padding_len = data[-1]
-                data = data[:-padding_len]
-                self._tail = data[size:]
-                return data[:size]
+                return data[:-padding_len]
 
         try:
             self._open_file()
-            self._setup_cipher()
+            self.securetar_header = SecureTarHeader.from_bytes(self._file)
+            self._setup_cipher(CipherMode.DECRYPT)
             yield DecryptInnerTar(self)
         finally:
             self._close_file()
@@ -306,22 +338,26 @@ class SecureTarFile:
         This is a helper to encrypt data and add padding.
         """
 
-        class EncryptInnerTar:
+        class EncryptInnerTar(SecureTarFile.DecryptEncryptInnerTar):
             """Encrypt inner tar file."""
 
             def __init__(self, parent: SecureTarFile) -> None:
                 """Initialize."""
-                self._parent = parent
-                self._size = tarinfo.size + BLOCK_SIZE - tarinfo.size % BLOCK_SIZE
-                self._size += IV_SIZE + SECURETAR_HEADER_SIZE
+                size = tarinfo.size + BLOCK_SIZE - tarinfo.size % BLOCK_SIZE
+                size += IV_SIZE + SECURETAR_HEADER_SIZE
+                super().__init__(parent, size)
+                self._head = parent.securetar_header.to_bytes()
 
-            def write(self, data: bytes) -> None:
-                """Write data."""
-                self._parent.write(data)
+            def _process_padding(self, data: bytes) -> bytes:
+                """Process padding."""
+                padding = self._parent._padder.finalize()
+                return data + self._parent._cipher.update(padding)
 
         try:
             self._open_file()
-            self._setup_cipher(tarinfo.size)
+            cbc_rand = self._nonce if self._nonce is not None else os.urandom(IV_SIZE)
+            self.securetar_header = SecureTarHeader(cbc_rand, tarinfo.size)
+            self._setup_cipher(CipherMode.ENCRYPT)
             yield EncryptInnerTar(self)
         finally:
             self._close_file()
@@ -329,11 +365,12 @@ class SecureTarFile:
     def write(self, data: bytes) -> None:
         """Write data."""
         data = self._padder.update(data)
-        self._file.write(self._encrypt.update(data))
+        self._file.write(self._cipher.update(data))
 
     def read(self, size: int = 0) -> bytes:
         """Read data."""
-        return self._decrypt.update(self._file.read(size))
+        data = self._padder.update(self._file.read(size))
+        return self._cipher.update(data)
 
     @property
     def path(self) -> Path:
