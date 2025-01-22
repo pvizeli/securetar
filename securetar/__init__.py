@@ -286,7 +286,7 @@ class SecureTarFile:
                 # Last block: Append any remaining head, read tail and discard padding
                 if self._head:
                     data += self._head
-                data += self._parent.read(self._size - self._pos)
+                data += self._parent.read(max(self._size - self._pos, 0))
                 padding_len = data[-1]
                 data = data[:-padding_len]
                 self._tail = data[size:]
