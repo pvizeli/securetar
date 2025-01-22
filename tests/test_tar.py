@@ -178,6 +178,49 @@ def test_create_encrypted_tar(tmp_path: Path, bufsize: int) -> None:
 
 
 @pytest.mark.parametrize(
+    ("nonce", "expect_same_content"),
+    [(None, False), (os.urandom(16), True)],
+)
+def test_create_encrypted_tar_fixed_nonce(
+    tmp_path: Path, nonce: bytes | None, expect_same_content: bool
+) -> None:
+    """Test to create a tar file with pre-defined nonce."""
+    key = os.urandom(16)
+
+    # Prepare test folder
+    temp_orig = tmp_path.joinpath("orig")
+    fixture_data = Path(__file__).parent.joinpath("fixtures/tar_data")
+    shutil.copytree(fixture_data, temp_orig, symlinks=True)
+    with open(temp_orig / "randbytes1", "wb") as file:
+        file.write(os.urandom(12345))
+    with open(temp_orig / "randbytes2", "wb") as file:
+        file.write(os.urandom(12345))
+
+    # Create Tarfile1
+    temp_tar1 = tmp_path.joinpath("backup1.tar")
+    with SecureTarFile(temp_tar1, "w", key=key, nonce=nonce) as tar_file:
+        atomic_contents_add(
+            tar_file,
+            temp_orig,
+            file_filter=lambda _: False,
+            arcname=".",
+        )
+
+    # Create Tarfile2
+    temp_tar2 = tmp_path.joinpath("backup2.tar")
+    with SecureTarFile(temp_tar2, "w", key=key, nonce=nonce) as tar_file:
+        atomic_contents_add(
+            tar_file,
+            temp_orig,
+            file_filter=lambda _: False,
+            arcname=".",
+        )
+
+    same_content = temp_tar1.read_bytes() == temp_tar2.read_bytes()
+    assert same_content == expect_same_content
+
+
+@pytest.mark.parametrize(
     ("enable_gzip", "inner_tar_files"),
     [
         (True, ("core.tar.gz", "core2.tar.gz", "core3.tar.gz")),

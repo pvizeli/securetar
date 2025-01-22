@@ -96,6 +96,7 @@ class SecureTarFile:
         gzip: bool = True,
         bufsize: int = DEFAULT_BUFSIZE,
         fileobj: IO[bytes] | None = None,
+        nonce: bytes | None = None,
     ) -> None:
         """Initialize encryption handler."""
         self._file: IO[bytes] | None = None
@@ -104,6 +105,7 @@ class SecureTarFile:
         self._bufsize: int = bufsize
         self._extra_args = {}
         self._fileobj = fileobj
+        self._nonce = nonce
 
         # Tarfile options
         self._tar: tarfile.TarFile | None = None
@@ -189,7 +191,7 @@ class SecureTarFile:
             self.securetar_header = SecureTarHeader.from_bytes(self._file)
             cbc_rand = self.securetar_header.cbc_rand
         else:
-            cbc_rand = os.urandom(IV_SIZE)
+            cbc_rand = self._nonce if self._nonce is not None else os.urandom(IV_SIZE)
             self.securetar_header = SecureTarHeader(cbc_rand, 0)
             self._file.write(self.securetar_header.to_bytes())
 
