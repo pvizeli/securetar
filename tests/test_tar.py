@@ -384,8 +384,11 @@ def test_tar_inside_tar_encrypt(
             inner_tar_path = temp_encrypted.joinpath(tar_info.name)
             with open(inner_tar_path, "wb") as file:
                 with istf.encrypt(tar_info) as encrypted:
+                    read = 0
                     while data := encrypted.read(bufsize):
+                        read += len(data)
                         file.write(data)
+                    assert read == encrypted.encrypted_size
 
             # Check the indicated size is correct
             assert (

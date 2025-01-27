@@ -345,6 +345,7 @@ class SecureTarFile:
                 """Initialize."""
                 size = tarinfo.size + BLOCK_SIZE - tarinfo.size % BLOCK_SIZE
                 size += IV_SIZE + SECURETAR_HEADER_SIZE
+                self.encrypted_size = size
                 super().__init__(parent, size)
                 self._head = parent.securetar_header.to_bytes()
 
