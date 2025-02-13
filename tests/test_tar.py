@@ -791,3 +791,33 @@ def test_outer_tar_must_be_open(tmp_path: Path) -> None:
     with pytest.raises(SecureTarError):
         with outer_secure_tar_file.create_inner_tar("any.tgz", gzip=True):
             pass
+
+
+def test_outer_tar_open_close(tmp_path: Path) -> None:
+    # Prepare test folder
+    temp_orig = tmp_path.joinpath("orig")
+    fixture_data = Path(__file__).parent.joinpath("fixtures/tar_data")
+    shutil.copytree(fixture_data, temp_orig, symlinks=True)
+
+    # Create Tarfile
+    main_tar = tmp_path.joinpath("backup.tar")
+    outer_secure_tar_file = SecureTarFile(main_tar, "w", gzip=False)
+
+    outer_secure_tar_file.open()
+    with outer_secure_tar_file.create_inner_tar("any.tgz", gzip=True) as tar_file:
+        atomic_contents_add(
+            tar_file,
+            temp_orig,
+            file_filter=lambda _: False,
+            arcname=".",
+        )
+
+    outer_secure_tar_file.close()
+
+    # Restore
+    temp_new = tmp_path.joinpath("new")
+    with SecureTarFile(main_tar, "r", gzip=False) as tar_file:
+        tar_file.extractall(path=temp_new, members=tar_file)
+
+    assert temp_new.is_dir()
+    assert temp_new.joinpath("any.tgz").is_file()

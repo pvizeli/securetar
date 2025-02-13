@@ -156,6 +156,13 @@ class SecureTarFile:
 
     def __enter__(self) -> tarfile.TarFile:
         """Start context manager tarfile."""
+        return self.open()
+
+    def open(self) -> tarfile.TarFile:
+        """Open SecureTar file.
+
+        Returns tarfile object, data written to is encrypted if key is provided.
+        """
         if not self._key:
             self._tar = tarfile.open(
                 name=str(self._name),
@@ -221,6 +228,9 @@ class SecureTarFile:
         self._padder = padding.PKCS7(BLOCK_SIZE_BITS).padder()
 
     def __exit__(self, exc_type, exc_value, traceback) -> None:
+        self.close()
+
+    def close(self) -> None:
         """Close file."""
         if self._tar:
             self._tar.close()
