@@ -13,6 +13,7 @@ import pytest
 
 from securetar import (
     SECURETAR_MAGIC,
+    SecureTarError,
     SecureTarFile,
     SecureTarReadError,
     _add_stream,
@@ -780,3 +781,13 @@ def test_tar_stream(tmp_path: Path, format: int) -> None:
         test_file = temp_new.joinpath("test.txt")
         assert test_file.is_file()
         assert test_file.read_bytes() == b"test"
+
+
+def test_outer_tar_must_be_open(tmp_path: Path) -> None:
+    # Create Tarfile
+    main_tar = tmp_path.joinpath("backup.tar")
+    outer_secure_tar_file = SecureTarFile(main_tar, "w", gzip=True)
+
+    with pytest.raises(SecureTarError):
+        with outer_secure_tar_file.create_inner_tar("any.tgz", gzip=True):
+            pass

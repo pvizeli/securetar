@@ -142,6 +142,9 @@ class SecureTarFile:
         self, name: str, key: bytes | None = None, gzip: bool = True
     ) -> "_InnerSecureTarFile":
         """Create inner tar file."""
+        if not self._tar:
+            raise SecureTarError("SecureTar not open")
+
         return _InnerSecureTarFile(
             self._tar,
             name=Path(name),
