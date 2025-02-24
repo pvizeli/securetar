@@ -786,7 +786,7 @@ def test_tar_stream(tmp_path: Path, format: int) -> None:
 def test_outer_tar_must_be_open(tmp_path: Path) -> None:
     # Create Tarfile
     main_tar = tmp_path.joinpath("backup.tar")
-    outer_secure_tar_file = SecureTarFile(main_tar, "w", gzip=True)
+    outer_secure_tar_file = SecureTarFile(main_tar, "w", gzip=False)
 
     with pytest.raises(SecureTarError):
         with outer_secure_tar_file.create_inner_tar("any.tgz", gzip=True):
@@ -821,3 +821,19 @@ def test_outer_tar_open_close(tmp_path: Path) -> None:
 
     assert temp_new.is_dir()
     assert temp_new.joinpath("any.tgz").is_file()
+
+
+def test_outer_tar_exclusive_mode(tmp_path: Path) -> None:
+    # Create Tarfile
+    main_tar = tmp_path.joinpath("backup.tar")
+    outer_secure_tar_file = SecureTarFile(main_tar, "x", gzip=False)
+
+    with outer_secure_tar_file:
+        with outer_secure_tar_file.create_inner_tar("any.tgz", key=os.urandom(16), gzip=True):
+            pass
+
+    assert main_tar.exists()
+
+    outer_secure_tar_file = SecureTarFile(main_tar, "x", gzip=False)
+    with pytest.raises(FileExistsError):
+        outer_secure_tar_file.open()
