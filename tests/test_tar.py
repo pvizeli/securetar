@@ -829,7 +829,9 @@ def test_outer_tar_exclusive_mode(tmp_path: Path) -> None:
     outer_secure_tar_file = SecureTarFile(main_tar, "x", gzip=False)
 
     with outer_secure_tar_file:
-        with outer_secure_tar_file.create_inner_tar("any.tgz", key=os.urandom(16), gzip=True):
+        with outer_secure_tar_file.create_inner_tar(
+            "any.tgz", key=os.urandom(16), gzip=True
+        ):
             pass
 
     assert main_tar.exists()
