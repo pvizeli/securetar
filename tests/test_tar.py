@@ -9,7 +9,9 @@ import tarfile
 import time
 from dataclasses import dataclass
 from pathlib import Path, PurePath
+from typing import Any
 from unittest.mock import Mock, patch
+
 import pytest
 
 from securetar import (
@@ -119,7 +121,29 @@ def test_create_pure_tar(tmp_path: Path, bufsize: int) -> None:
     assert temp_new.joinpath("README.md").is_file()
 
 
-def test_create_with_error(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("target", "attribute", "expected_error"),
+    [
+        (
+            tarfile.TarFile,
+            "addfile",
+            "Error adding {temp_orig} to tarfile: Boom! (OSError)",
+        ),
+        (
+            Path,
+            "iterdir",
+            "Error iterating over {temp_orig}: Boom! (OSError)",
+        ),
+        (
+            tarfile,
+            "copyfileobj",
+            "Error adding {temp_orig}/README.md to tarfile: Boom! (OSError)",
+        ),
+    ],
+)
+def test_create_with_error_add_dir(
+    tmp_path: Path, target: Any, attribute: str, expected_error: str
+) -> None:
     """Test error in atomic_contents_add."""
     # Prepare test folder
     temp_orig = tmp_path.joinpath("orig")
@@ -129,10 +153,10 @@ def test_create_with_error(tmp_path: Path) -> None:
     # Create Tarfile
     temp_tar = tmp_path.joinpath("backup.tar")
     with (
-        patch.object(tarfile.TarFile, "addfile", side_effect=OSError("Boom!")),
+        patch.object(target, attribute, side_effect=OSError("Boom!")),
         pytest.raises(
             AddFileError,
-            match=re.escape(f"Error adding {temp_orig} to tarfile: Boom! (OSError)"),
+            match=re.escape(expected_error.format(temp_orig=temp_orig)),
         ),
         SecureTarFile(temp_tar, "w") as tar_file,
     ):
