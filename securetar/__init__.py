@@ -584,29 +584,45 @@ def _atomic_contents_add(
     """Append directories and/or files to the TarFile if file_filter returns False."""
 
     # Add directory only (recursive=False) to ensure we also archive empty directories
-    _add_wrap_error(tar_file, origin_path, arcname)
-
-    for directory_item in origin_path.iterdir():
-        item_arcpath = PurePath(arcname, directory_item.name)
-        if file_filter(PurePath(item_arcpath)):
-            continue
-
-        item_arcname = item_arcpath.as_posix()
-        if directory_item.is_dir() and not directory_item.is_symlink():
-            _atomic_contents_add(tar_file, directory_item, file_filter, item_arcname)
-            continue
-
-        _add_wrap_error(tar_file, directory_item, item_arcname)
-
-    return None
-
-
-def _add_wrap_error(tar_file: tarfile.TarFile, file_path: Path, arcname: str) -> None:
-    """Wrap add function with error handling."""
     try:
-        tar_file.add(file_path.as_posix(), arcname=arcname, recursive=False)
+        tar_file.add(origin_path.as_posix(), arcname=arcname, recursive=False)
     except (OSError, tarfile.TarError) as err:
         raise AddFileError(
-            file_path,
-            f"Error adding {file_path} to tarfile: {err} ({err.__class__.__name__})",
+            origin_path,
+            f"Error adding {origin_path} to tarfile: {err} ({err.__class__.__name__})",
         ) from err
+
+    try:
+        dir_iterator = origin_path.iterdir()
+    except (OSError, tarfile.TarError) as err:
+        raise AddFileError(
+            origin_path,
+            f"Error iterating over {origin_path}: {err} ({err.__class__.__name__})",
+        ) from err
+
+    for directory_item in dir_iterator:
+        try:
+            item_arcpath = PurePath(arcname, directory_item.name)
+            if file_filter(PurePath(item_arcpath)):
+                continue
+
+            item_arcname = item_arcpath.as_posix()
+            if directory_item.is_dir() and not directory_item.is_symlink():
+                _atomic_contents_add(
+                    tar_file, directory_item, file_filter, item_arcname
+                )
+                continue
+
+            tar_file.add(
+                directory_item.as_posix(), arcname=item_arcname, recursive=False
+            )
+        except (OSError, tarfile.TarError) as err:
+            raise AddFileError(
+                directory_item,
+                (
+                    f"Error adding {directory_item} to tarfile: "
+                    f"{err} ({err.__class__.__name__})"
+                ),
+            ) from err
+
+    return None
