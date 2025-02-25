@@ -608,5 +608,5 @@ def _add_wrap_error(tar_file: tarfile.TarFile, file_path: Path, arcname: str) ->
     except (OSError, tarfile.TarError) as err:
         raise AddFileError(
             file_path,
-            f"Error adding {file_path} to tarfile: {err} ({err.__class__.__name__})"
+            f"Error adding {file_path} to tarfile: {err} ({err.__class__.__name__})",
         ) from err
