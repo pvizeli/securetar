@@ -8,10 +8,13 @@ import tarfile
 import time
 from dataclasses import dataclass
 from pathlib import Path, PurePath
+from typing import Any
 from unittest.mock import Mock, patch
+
 import pytest
 
 from securetar import (
+    AddFileError,
     SECURETAR_MAGIC,
     SecureTarError,
     SecureTarFile,
@@ -115,6 +118,63 @@ def test_create_pure_tar(tmp_path: Path, bufsize: int) -> None:
         "775",
     ]
     assert temp_new.joinpath("README.md").is_file()
+
+
+@pytest.mark.parametrize(
+    ("target", "attribute", "expected_error"),
+    [
+        (
+            tarfile.TarFile,
+            "addfile",
+            r"Error adding {temp_orig} to tarfile: Boom! \(OSError\)",
+        ),
+        (
+            tarfile,
+            "copyfileobj",
+            r"Error adding {temp_orig}/.+ to tarfile: Boom! \(OSError\)",
+        ),
+        (
+            Path,
+            "is_dir",
+            r"Error adding {temp_orig}/.+ to tarfile: Boom! \(OSError\)",
+        ),
+        (
+            Path,
+            "is_symlink",
+            r"Error adding {temp_orig}/.+ to tarfile: Boom! \(OSError\)",
+        ),
+        (
+            Path,
+            "iterdir",
+            r"Error iterating over {temp_orig}: Boom! \(OSError\)",
+        ),
+    ],
+)
+def test_create_with_error(
+    tmp_path: Path, target: Any, attribute: str, expected_error: str
+) -> None:
+    """Test error in atomic_contents_add."""
+    # Prepare test folder
+    temp_orig = tmp_path.joinpath("orig")
+    fixture_data = Path(__file__).parent.joinpath("fixtures/tar_data")
+    shutil.copytree(fixture_data, temp_orig, symlinks=True)
+
+    # Create Tarfile
+    temp_tar = tmp_path.joinpath("backup.tar")
+    with (
+        patch.object(target, attribute, side_effect=OSError("Boom!")),
+        pytest.raises(
+            AddFileError,
+            match=expected_error.format(temp_orig=temp_orig),
+        ),
+        SecureTarFile(temp_tar, "w") as tar_file,
+    ):
+        atomic_contents_add(
+            tar_file,
+            temp_orig,
+            file_filter=lambda _: False,
+            arcname=".",
+        )
 
 
 @pytest.mark.parametrize("bufsize", [333, 10240, 4 * 2**20])
