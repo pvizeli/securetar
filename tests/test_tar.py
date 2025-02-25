@@ -3,7 +3,6 @@
 import gzip
 import io
 import os
-import re
 import shutil
 import tarfile
 import time
@@ -127,27 +126,27 @@ def test_create_pure_tar(tmp_path: Path, bufsize: int) -> None:
         (
             tarfile.TarFile,
             "addfile",
-            "Error adding {temp_orig} to tarfile: Boom! \(OSError\)",
+            r"Error adding {temp_orig} to tarfile: Boom! \(OSError\)",
         ),
         (
             tarfile,
             "copyfileobj",
-            "Error adding {temp_orig}/.+ to tarfile: Boom! \(OSError\)",
+            r"Error adding {temp_orig}/.+ to tarfile: Boom! \(OSError\)",
         ),
         (
             Path,
             "is_dir",
-            "Error adding {temp_orig}/.+ to tarfile: Boom! \(OSError\)",
+            r"Error adding {temp_orig}/.+ to tarfile: Boom! \(OSError\)",
         ),
         (
             Path,
             "is_symlink",
-            "Error adding {temp_orig}/.+ to tarfile: Boom! \(OSError\)",
+            r"Error adding {temp_orig}/.+ to tarfile: Boom! \(OSError\)",
         ),
         (
             Path,
             "iterdir",
-            "Error iterating over {temp_orig}: Boom! \(OSError\)",
+            r"Error iterating over {temp_orig}: Boom! \(OSError\)",
         ),
     ],
 )
