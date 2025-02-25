@@ -148,7 +148,7 @@ class SecureTarFile:
         return _InnerSecureTarFile(
             self._tar,
             name=Path(name),
-            mode=self._mode,
+            mode="w",
             key=key,
             gzip=gzip,
             bufsize=self._bufsize,
