@@ -130,14 +130,24 @@ def test_create_pure_tar(tmp_path: Path, bufsize: int) -> None:
             "Error adding {temp_orig} to tarfile: Boom! (OSError)",
         ),
         (
-            Path,
-            "iterdir",
-            "Error iterating over {temp_orig}: Boom! (OSError)",
-        ),
-        (
             tarfile,
             "copyfileobj",
             "Error adding {temp_orig}/README.md to tarfile: Boom! (OSError)",
+        ),
+        (
+            Path,
+            "is_dir",
+            "Error adding {temp_orig}/README.md to tarfile: Boom! (OSError)",
+        ),
+        (
+            Path,
+            "is_symlink",
+            "Error adding {temp_orig}/test_symlink to tarfile: Boom! (OSError)",
+        ),
+        (
+            Path,
+            "iterdir",
+            "Error iterating over {temp_orig}: Boom! (OSError)",
         ),
     ],
 )
