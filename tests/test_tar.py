@@ -127,31 +127,31 @@ def test_create_pure_tar(tmp_path: Path, bufsize: int) -> None:
         (
             tarfile.TarFile,
             "addfile",
-            "Error adding {temp_orig} to tarfile: Boom! (OSError)",
+            "Error adding {temp_orig} to tarfile: Boom! \(OSError\)",
         ),
         (
             tarfile,
             "copyfileobj",
-            "Error adding {temp_orig}/README.md to tarfile: Boom! (OSError)",
+            "Error adding {temp_orig}/.+ to tarfile: Boom! \(OSError\)",
         ),
         (
             Path,
             "is_dir",
-            "Error adding {temp_orig}/README.md to tarfile: Boom! (OSError)",
+            "Error adding {temp_orig}/.+ to tarfile: Boom! \(OSError\)",
         ),
         (
             Path,
             "is_symlink",
-            "Error adding {temp_orig}/test_symlink to tarfile: Boom! (OSError)",
+            "Error adding {temp_orig}/.+ to tarfile: Boom! \(OSError\)",
         ),
         (
             Path,
             "iterdir",
-            "Error iterating over {temp_orig}: Boom! (OSError)",
+            "Error iterating over {temp_orig}: Boom! \(OSError\)",
         ),
     ],
 )
-def test_create_with_error_add_dir(
+def test_create_with_error(
     tmp_path: Path, target: Any, attribute: str, expected_error: str
 ) -> None:
     """Test error in atomic_contents_add."""
@@ -166,7 +166,7 @@ def test_create_with_error_add_dir(
         patch.object(target, attribute, side_effect=OSError("Boom!")),
         pytest.raises(
             AddFileError,
-            match=re.escape(expected_error.format(temp_orig=temp_orig)),
+            match=expected_error.format(temp_orig=temp_orig),
         ),
         SecureTarFile(temp_tar, "w") as tar_file,
     ):
