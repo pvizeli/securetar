@@ -594,7 +594,7 @@ def _atomic_contents_add(
 
     try:
         dir_iterator = origin_path.iterdir()
-    except (OSError, tarfile.TarError) as err:
+    except OSError as err:
         raise AddFileError(
             origin_path,
             f"Error iterating over {origin_path}: {err} ({err.__class__.__name__})",
