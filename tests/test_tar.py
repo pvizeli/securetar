@@ -3,6 +3,7 @@
 import gzip
 import io
 import os
+import re
 import shutil
 import tarfile
 import time
@@ -115,6 +116,31 @@ def test_create_pure_tar(tmp_path: Path, bufsize: int) -> None:
         "775",
     ]
     assert temp_new.joinpath("README.md").is_file()
+
+
+def test_create_with_error(tmp_path: Path) -> None:
+    """Test error in atomic_contents_add."""
+    # Prepare test folder
+    temp_orig = tmp_path.joinpath("orig")
+    fixture_data = Path(__file__).parent.joinpath("fixtures/tar_data")
+    shutil.copytree(fixture_data, temp_orig, symlinks=True)
+
+    # Create Tarfile
+    temp_tar = tmp_path.joinpath("backup.tar")
+    with (
+        patch.object(tarfile.TarFile, "addfile", side_effect=OSError("Boom!")),
+        pytest.raises(
+            SecureTarError,
+            match=re.escape(f"Error adding {temp_orig} to tarfile: Boom! (OSError)"),
+        ),
+        SecureTarFile(temp_tar, "w") as tar_file,
+    ):
+        atomic_contents_add(
+            tar_file,
+            temp_orig,
+            file_filter=lambda _: False,
+            arcname=".",
+        )
 
 
 @pytest.mark.parametrize("bufsize", [333, 10240, 4 * 2**20])
