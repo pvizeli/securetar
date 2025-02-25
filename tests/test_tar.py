@@ -13,6 +13,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from securetar import (
+    AddFileError,
     SECURETAR_MAGIC,
     SecureTarError,
     SecureTarFile,
@@ -130,7 +131,7 @@ def test_create_with_error(tmp_path: Path) -> None:
     with (
         patch.object(tarfile.TarFile, "addfile", side_effect=OSError("Boom!")),
         pytest.raises(
-            SecureTarError,
+            AddFileError,
             match=re.escape(f"Error adding {temp_orig} to tarfile: Boom! (OSError)"),
         ),
         SecureTarFile(temp_tar, "w") as tar_file,

@@ -11,7 +11,7 @@ import tarfile
 import time
 from contextlib import contextmanager
 from pathlib import Path, PurePath
-from typing import IO, BinaryIO
+from typing import Any, IO, BinaryIO
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import padding
@@ -87,6 +87,15 @@ class SecureTarHeader:
 
 class SecureTarError(Exception):
     """SecureTar error."""
+
+
+class AddFileError(SecureTarError):
+    """Raised when a file could not be added to an archive."""
+
+    def __init__(self, path: Path, *args: Any) -> None:
+        """Initialize."""
+        self.path = path
+        super().__init__(*args)
 
 
 class SecureTarReadError(SecureTarError):
@@ -597,6 +606,7 @@ def _add_wrap_error(tar_file: tarfile.TarFile, file_path: Path, arcname: str) ->
     try:
         tar_file.add(file_path.as_posix(), arcname=arcname, recursive=False)
     except (OSError, tarfile.TarError) as err:
-        raise SecureTarError(
+        raise AddFileError(
+            file_path,
             f"Error adding {file_path} to tarfile: {err} ({err.__class__.__name__})"
         ) from err
